@@ -1,0 +1,13 @@
+services:
+  axion:
+    build: .
+    image: axion:latest
+    container_name: axion
+    volumes:
+      - ./data:/data
+    # Keep container running or run a specific command
+    # Example: Run the shell interactively
+    stdin_open: true
+    tty: true
+    # To run as a library/server in future:
+    # command: ["axion", "server"] 

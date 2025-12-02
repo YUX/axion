@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: master
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+
+      - name: Verify Format
+        run: zig fmt --check .
+
+      - name: Build Project
+        run: zig build --verbose
+
+      - name: Run Tests
+        run: zig build test --verbose
+
+      - name: Build Benchmarks
+        run: |
+          zig build bench_native_axion --verbose
+          zig build bench_native_sqlite --verbose
+          zig build bench_vtab_axion --verbose

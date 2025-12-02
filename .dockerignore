@@ -1,0 +1,10 @@
+zig-cache/
+zig-out/
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+data/
+*.swp
+*.swo
