@@ -1,4 +1,4 @@
-![](img/cover.jpg)
+![](img/cover.jpeg)
 # Axion ⚡
 
 **The High-Performance, Embeddable Storage Engine for Zig & SQLite.**
