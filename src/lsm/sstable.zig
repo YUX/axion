@@ -3,7 +3,7 @@ const Format = @import("sstable/format.zig");
 pub const SSTable = struct {
     pub const BLOCK_SIZE = Format.BLOCK_SIZE;
     pub const RESTART_INTERVAL = Format.RESTART_INTERVAL;
-    
+
     pub const Builder = @import("sstable/builder.zig").Builder;
     pub const Reader = @import("sstable/reader.zig").Reader;
     pub const ValueRef = Reader.ValueRef;
@@ -13,7 +13,7 @@ pub const SSTable = struct {
 test "SSTable basic flow" {
     const std = @import("std");
     const BlockCache = @import("block_cache.zig").BlockCache;
-    
+
     const allocator = std.testing.allocator;
     var rnd = std.crypto.random;
     var buf: [64]u8 = undefined;
@@ -22,7 +22,7 @@ test "SSTable basic flow" {
     std.fs.cwd().deleteFile(test_path) catch {};
     defer std.fs.cwd().deleteFile(test_path) catch {};
 
-    var block_cache = BlockCache.init(allocator, 1024*1024);
+    var block_cache = BlockCache.init(allocator, 1024 * 1024);
     defer block_cache.deinit();
 
     // Build
@@ -50,8 +50,8 @@ test "SSTable basic flow" {
     } else {
         try std.testing.expect(false);
     }
-    
-     if (try reader.get(allocator, "key2", 25)) |val| {
+
+    if (try reader.get(allocator, "key2", 25)) |val| {
         defer val.deinit();
         try std.testing.expectEqualStrings("value2", val.data);
     }

@@ -118,16 +118,16 @@ fn decodeBytes(allocator: std.mem.Allocator, data: []const u8) ![]u8 {
     while (i < data.len) {
         const b = data[i];
         if (b == 0x00) {
-             if (i + 1 < data.len and data[i+1] == 0xFF) {
-                 try buf.append(allocator, 0x00);
-                 i += 2;
-             } else {
-                 // Terminator. Should be at the end.
-                 if (i != data.len - 1) {
-                     break; 
-                 }
-                 break;
-             }
+            if (i + 1 < data.len and data[i + 1] == 0xFF) {
+                try buf.append(allocator, 0x00);
+                i += 2;
+            } else {
+                // Terminator. Should be at the end.
+                if (i != data.len - 1) {
+                    break;
+                }
+                break;
+            }
         } else {
             try buf.append(allocator, b);
             i += 1;
@@ -138,7 +138,7 @@ fn decodeBytes(allocator: std.mem.Allocator, data: []const u8) ![]u8 {
 
 test "Composite Key Encoding" {
     const allocator = std.testing.allocator;
-    
+
     const pk = "user:1";
     const values = [_][]const u8{"Alice"};
     const idx_id = 1;
@@ -148,7 +148,7 @@ test "Composite Key Encoding" {
 
     // Check prefix
     try std.testing.expectEqual(encoded[0], 0x01); // Type
-    
+
     // Check ID
     const id = std.mem.readInt(u32, encoded[1..5], .big);
     try std.testing.expectEqual(id, 1);
@@ -156,15 +156,15 @@ test "Composite Key Encoding" {
     // Decode PK (1 column)
     const decoded_pk = try extractPrimaryKey(allocator, encoded, 1);
     defer allocator.free(decoded_pk);
-    
+
     try std.testing.expectEqualStrings(pk, decoded_pk);
 }
 
 test "Multi-Column Key Encoding" {
     const allocator = std.testing.allocator;
-    
+
     const pk = "user:1";
-    const values = [_][]const u8{"Alice", "Smith"}; // 2 columns
+    const values = [_][]const u8{ "Alice", "Smith" }; // 2 columns
     const idx_id = 1;
 
     const encoded = try encodeIndexKey(allocator, idx_id, &values, pk);
@@ -173,25 +173,25 @@ test "Multi-Column Key Encoding" {
     // Decode PK (2 columns)
     const decoded_pk = try extractPrimaryKey(allocator, encoded, 2);
     defer allocator.free(decoded_pk);
-    
+
     try std.testing.expectEqualStrings(pk, decoded_pk);
 }
 
 test "Composite Key Sort Order" {
     const allocator = std.testing.allocator;
-    
-    const k1 = try encodeIndexKey(allocator, 1, &.{ "Alice" }, "id1"); // "Alice"
+
+    const k1 = try encodeIndexKey(allocator, 1, &.{"Alice"}, "id1"); // "Alice"
     defer allocator.free(k1);
-    
-    const k2 = try encodeIndexKey(allocator, 1, &.{ "Bob" }, "id2");   // "Bob"
+
+    const k2 = try encodeIndexKey(allocator, 1, &.{"Bob"}, "id2"); // "Bob"
     defer allocator.free(k2);
-    
-    const k3 = try encodeIndexKey(allocator, 1, &.{ "Alice" }, "id3"); // "Alice" (diff PK)
+
+    const k3 = try encodeIndexKey(allocator, 1, &.{"Alice"}, "id3"); // "Alice" (diff PK)
     defer allocator.free(k3);
 
     // Alice < Bob
     try std.testing.expect(std.mem.order(u8, k1, k2) == .lt);
-    
+
     // Alice(id1) < Alice(id3)
     try std.testing.expect(std.mem.order(u8, k1, k3) == .lt);
 }

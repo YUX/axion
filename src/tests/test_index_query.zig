@@ -36,11 +36,11 @@ test "Secondary Index Query Optimization" {
         // Or we can just check the result.
         // To verify optimization, we usually rely on "SCAN TABLE users USING INDEX ..."
         // VTab explanation: "SCAN TABLE users VIRTUAL TABLE INDEX <idxNum:idxStr>"
-        
+
         // Let's verify correctness first.
         if (c.sqlite3_prepare_v2(db, "SELECT id FROM users WHERE age = 20", -1, &stmt, null) != c.SQLITE_OK) return error.PrepareFailed;
         defer _ = c.sqlite3_finalize(stmt);
-        
+
         if (c.sqlite3_step(stmt) == c.SQLITE_ROW) {
             const id = c.sqlite3_column_int64(stmt, 0);
             try std.testing.expectEqual(2, id);

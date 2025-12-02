@@ -36,7 +36,7 @@ test "SQLite VTab Schema Integration" {
 
     rc = c.sqlite3_exec(db, "INSERT INTO users (id, name, age) VALUES (2, 'Bob', 40.0);", null, null, null);
     if (rc != c.SQLITE_OK) {
-         return error.InsertFailed;
+        return error.InsertFailed;
     }
 
     // 3. Select Data (Point Lookup)
@@ -50,7 +50,7 @@ test "SQLite VTab Schema Integration" {
         if (c.sqlite3_step(stmt) == c.SQLITE_ROW) {
             const name = c.sqlite3_column_text(stmt, 0);
             const age = c.sqlite3_column_double(stmt, 1);
-            
+
             const name_slice = std.mem.span(name);
             try std.testing.expectEqualStrings("Alice", name_slice);
             try std.testing.expectApproxEqAbs(30.5, age, 0.001);
@@ -83,11 +83,11 @@ test "SQLite VTab Schema Integration" {
             try std.testing.expectEqualStrings("Bob", std.mem.span(name));
         } else return error.MissingRow;
     }
-    
+
     // 5. Update Data
     rc = c.sqlite3_exec(db, "UPDATE users SET name = 'Alice Cooper' WHERE id = 1;", null, null, null);
     if (rc != c.SQLITE_OK) return error.UpdateFailed;
-    
+
     // Verify Update
     {
         var stmt: ?*c.sqlite3_stmt = null;
@@ -100,11 +100,11 @@ test "SQLite VTab Schema Integration" {
             try std.testing.expectEqualStrings("Alice Cooper", std.mem.span(name));
         } else return error.UpdateVerificationFailed;
     }
-    
+
     // 6. Delete Data
     rc = c.sqlite3_exec(db, "DELETE FROM users WHERE id = 2;", null, null, null);
     if (rc != c.SQLITE_OK) return error.DeleteFailed;
-    
+
     // Verify Delete
     {
         var stmt: ?*c.sqlite3_stmt = null;

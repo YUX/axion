@@ -10,7 +10,7 @@ pub const Metrics = struct {
     block_cache_misses: std.atomic.Value(u64),
     txn_success: std.atomic.Value(u64),
     txn_conflict: std.atomic.Value(u64),
-    
+
     pub fn init() Metrics {
         return Metrics{
             .puts = std.atomic.Value(u64).init(0),
@@ -25,15 +25,33 @@ pub const Metrics = struct {
         };
     }
 
-    pub inline fn put(self: *Metrics) void { _ = self.puts.fetchAdd(1, .monotonic); }
-    pub inline fn get(self: *Metrics) void { _ = self.gets.fetchAdd(1, .monotonic); }
-    pub inline fn iterator(self: *Metrics) void { _ = self.iterators.fetchAdd(1, .monotonic); }
-    pub inline fn compaction(self: *Metrics) void { _ = self.compactions.fetchAdd(1, .monotonic); }
-    pub inline fn flush(self: *Metrics) void { _ = self.flushes.fetchAdd(1, .monotonic); }
-    pub inline fn cacheHit(self: *Metrics) void { _ = self.block_cache_hits.fetchAdd(1, .monotonic); }
-    pub inline fn cacheMiss(self: *Metrics) void { _ = self.block_cache_misses.fetchAdd(1, .monotonic); }
-    pub inline fn txnSuccess(self: *Metrics) void { _ = self.txn_success.fetchAdd(1, .monotonic); }
-    pub inline fn txnConflict(self: *Metrics) void { _ = self.txn_conflict.fetchAdd(1, .monotonic); }
+    pub inline fn put(self: *Metrics) void {
+        _ = self.puts.fetchAdd(1, .monotonic);
+    }
+    pub inline fn get(self: *Metrics) void {
+        _ = self.gets.fetchAdd(1, .monotonic);
+    }
+    pub inline fn iterator(self: *Metrics) void {
+        _ = self.iterators.fetchAdd(1, .monotonic);
+    }
+    pub inline fn compaction(self: *Metrics) void {
+        _ = self.compactions.fetchAdd(1, .monotonic);
+    }
+    pub inline fn flush(self: *Metrics) void {
+        _ = self.flushes.fetchAdd(1, .monotonic);
+    }
+    pub inline fn cacheHit(self: *Metrics) void {
+        _ = self.block_cache_hits.fetchAdd(1, .monotonic);
+    }
+    pub inline fn cacheMiss(self: *Metrics) void {
+        _ = self.block_cache_misses.fetchAdd(1, .monotonic);
+    }
+    pub inline fn txnSuccess(self: *Metrics) void {
+        _ = self.txn_success.fetchAdd(1, .monotonic);
+    }
+    pub inline fn txnConflict(self: *Metrics) void {
+        _ = self.txn_conflict.fetchAdd(1, .monotonic);
+    }
 };
 
 pub var global: Metrics = Metrics.init();

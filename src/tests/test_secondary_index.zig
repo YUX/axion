@@ -31,7 +31,7 @@ test "Secondary Index Range Scan" {
 
     // 3. Query using Index Range (20 <= age <= 30)
     // Should return User20, User25, User30
-    
+
     // Check Query Plan
     {
         var stmt: ?*c.sqlite3_stmt = null;

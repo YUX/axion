@@ -9,13 +9,13 @@ var ops_count = std.atomic.Value(usize).init(0);
 var should_stop = std.atomic.Value(bool).init(false);
 
 fn panic(msg: []const u8) noreturn {
-    std.debug.print("Error: {s}\n", . { msg });
+    std.debug.print("Error: {s}\n", .{msg});
     std.process.exit(1);
 }
 
 fn worker(workload: Config.Workload, seed: u64, key_count: usize) void {
     var db: ?*c.sqlite3 = null;
-    
+
     // Open connection to SAME db file
     const rc = c.sqlite3_open(Config.DB_PATH_SQLITE, &db);
     if (rc != c.SQLITE_OK) return;
@@ -35,7 +35,7 @@ fn worker(workload: Config.Workload, seed: u64, key_count: usize) void {
 
     _ = c.sqlite3_prepare_v2(db, "SELECT value FROM bench WHERE key = ?", -1, &stmt_read, null);
     defer _ = c.sqlite3_finalize(stmt_read);
-    
+
     _ = c.sqlite3_prepare_v2(db, "SELECT key, value FROM bench WHERE key >= ? LIMIT 100", -1, &stmt_scan, null);
     defer _ = c.sqlite3_finalize(stmt_scan);
 
@@ -47,8 +47,8 @@ fn worker(workload: Config.Workload, seed: u64, key_count: usize) void {
         switch (workload) {
             .Write => {
                 const k = random.intRangeAtMost(usize, 0, key_count);
-                const k_str = std.fmt.bufPrintZ(&buf_key, Config.KEY_FMT, . { k }) catch unreachable;
-                const v_str = std.fmt.bufPrintZ(&buf_val, Config.VAL_FMT, . { k }) catch unreachable;
+                const k_str = std.fmt.bufPrintZ(&buf_key, Config.KEY_FMT, .{k}) catch unreachable;
+                const v_str = std.fmt.bufPrintZ(&buf_val, Config.VAL_FMT, .{k}) catch unreachable;
 
                 _ = c.sqlite3_reset(stmt_insert);
                 _ = c.sqlite3_bind_text(stmt_insert, 1, k_str.ptr, -1, c.SQLITE_STATIC);
@@ -58,8 +58,8 @@ fn worker(workload: Config.Workload, seed: u64, key_count: usize) void {
             .SeqWrite => {
                 const k = seq_counter;
                 seq_counter += 1;
-                const k_str = std.fmt.bufPrintZ(&buf_key, Config.SEQ_KEY_FMT, . { k }) catch unreachable;
-                const v_str = std.fmt.bufPrintZ(&buf_val, Config.VAL_FMT, . { k }) catch unreachable;
+                const k_str = std.fmt.bufPrintZ(&buf_key, Config.SEQ_KEY_FMT, .{k}) catch unreachable;
+                const v_str = std.fmt.bufPrintZ(&buf_val, Config.VAL_FMT, .{k}) catch unreachable;
 
                 _ = c.sqlite3_reset(stmt_insert);
                 _ = c.sqlite3_bind_text(stmt_insert, 1, k_str.ptr, -1, c.SQLITE_STATIC);
@@ -68,7 +68,7 @@ fn worker(workload: Config.Workload, seed: u64, key_count: usize) void {
             },
             .Read => {
                 const k = random.intRangeAtMost(usize, 0, key_count);
-                const k_str = std.fmt.bufPrintZ(&buf_key, Config.KEY_FMT, . { k }) catch unreachable;
+                const k_str = std.fmt.bufPrintZ(&buf_key, Config.KEY_FMT, .{k}) catch unreachable;
 
                 _ = c.sqlite3_reset(stmt_read);
                 _ = c.sqlite3_bind_text(stmt_read, 1, k_str.ptr, -1, c.SQLITE_STATIC);
@@ -76,33 +76,33 @@ fn worker(workload: Config.Workload, seed: u64, key_count: usize) void {
                     _ = c.sqlite3_column_text(stmt_read, 0);
                 }
             },
-             .RangeScan => {
-                 const k = random.intRangeAtMost(usize, 0, key_count);
-                 const k_str = std.fmt.bufPrintZ(&buf_key, Config.KEY_FMT, . { k }) catch unreachable;
-                 
-                 _ = c.sqlite3_reset(stmt_scan);
-                 _ = c.sqlite3_bind_text(stmt_scan, 1, k_str.ptr, -1, c.SQLITE_STATIC);
-                 while (c.sqlite3_step(stmt_scan) == c.SQLITE_ROW) {
-                     // consume
-                 }
+            .RangeScan => {
+                const k = random.intRangeAtMost(usize, 0, key_count);
+                const k_str = std.fmt.bufPrintZ(&buf_key, Config.KEY_FMT, .{k}) catch unreachable;
+
+                _ = c.sqlite3_reset(stmt_scan);
+                _ = c.sqlite3_bind_text(stmt_scan, 1, k_str.ptr, -1, c.SQLITE_STATIC);
+                while (c.sqlite3_step(stmt_scan) == c.SQLITE_ROW) {
+                    // consume
+                }
             },
             .Mix => {
                 if (random.boolean()) {
                     const k = random.intRangeAtMost(usize, 0, key_count);
-                    const k_str = std.fmt.bufPrintZ(&buf_key, Config.KEY_FMT, . { k }) catch unreachable;
-                    const v_str = std.fmt.bufPrintZ(&buf_val, Config.VAL_FMT, . { k }) catch unreachable;
+                    const k_str = std.fmt.bufPrintZ(&buf_key, Config.KEY_FMT, .{k}) catch unreachable;
+                    const v_str = std.fmt.bufPrintZ(&buf_val, Config.VAL_FMT, .{k}) catch unreachable;
                     _ = c.sqlite3_reset(stmt_insert);
                     _ = c.sqlite3_bind_text(stmt_insert, 1, k_str.ptr, -1, c.SQLITE_STATIC);
                     _ = c.sqlite3_bind_text(stmt_insert, 2, v_str.ptr, -1, c.SQLITE_STATIC);
                     _ = c.sqlite3_step(stmt_insert);
                 } else {
                     const k = random.intRangeAtMost(usize, 0, key_count);
-                    const k_str = std.fmt.bufPrintZ(&buf_key, Config.KEY_FMT, . { k }) catch unreachable;
+                    const k_str = std.fmt.bufPrintZ(&buf_key, Config.KEY_FMT, .{k}) catch unreachable;
                     _ = c.sqlite3_reset(stmt_read);
                     _ = c.sqlite3_bind_text(stmt_read, 1, k_str.ptr, -1, c.SQLITE_STATIC);
                     if (c.sqlite3_step(stmt_read) == c.SQLITE_ROW) {}
                 }
-            }
+            },
         }
         _ = ops_count.fetchAdd(1, .monotonic);
     }
@@ -110,12 +110,12 @@ fn worker(workload: Config.Workload, seed: u64, key_count: usize) void {
 
 fn runBenchmark(allocator: std.mem.Allocator, mode: Config.Mode, workload: Config.Workload, config: Config.BenchmarkConfig) !void {
     const db_path = Config.DB_PATH_SQLITE;
-    
+
     std.debug.print("  [SQLite] {s} - {s} (Threads: {}, Keys: {})...\n", .{
-        switch(mode) {
+        switch (mode) {
             .Full => "FULL",
             .Normal => "NORMAL",
-            .Off => "OFF"
+            .Off => "OFF",
         },
         @tagName(workload),
         config.threads,
@@ -131,10 +131,10 @@ fn runBenchmark(allocator: std.mem.Allocator, mode: Config.Mode, workload: Confi
     var db: ?*c.sqlite3 = null;
     const rc = c.sqlite3_open(db_path, &db);
     if (rc != c.SQLITE_OK) return;
-    
+
     // Set PRAGMAs
     _ = c.sqlite3_exec(db, "PRAGMA journal_mode = WAL;", null, null, null);
-    
+
     const sync_pragma = switch (mode) {
         .Full => "PRAGMA synchronous = FULL;",
         .Normal => "PRAGMA synchronous = NORMAL;",
@@ -150,13 +150,13 @@ fn runBenchmark(allocator: std.mem.Allocator, mode: Config.Mode, workload: Confi
         _ = c.sqlite3_exec(db, "BEGIN;", null, null, null);
         var stmt: ?*c.sqlite3_stmt = null;
         _ = c.sqlite3_prepare_v2(db, "INSERT INTO bench VALUES (?, ?)", -1, &stmt, null);
-        
+
         var i: usize = 0;
         var k_buf: [64]u8 = undefined;
         var v_buf: [64]u8 = undefined;
         while (i < config.key_count) : (i += 1) {
-            const k = std.fmt.bufPrintZ(&k_buf, Config.KEY_FMT, . { i }) catch unreachable;
-            const v = std.fmt.bufPrintZ(&v_buf, Config.VAL_FMT, . { i }) catch unreachable;
+            const k = std.fmt.bufPrintZ(&k_buf, Config.KEY_FMT, .{i}) catch unreachable;
+            const v = std.fmt.bufPrintZ(&v_buf, Config.VAL_FMT, .{i}) catch unreachable;
             _ = c.sqlite3_reset(stmt);
             _ = c.sqlite3_bind_text(stmt, 1, k.ptr, -1, c.SQLITE_STATIC);
             _ = c.sqlite3_bind_text(stmt, 2, v.ptr, -1, c.SQLITE_STATIC);
@@ -206,12 +206,12 @@ pub fn main() !void {
 
     for (modes) |m| {
         if (config.filter_mode) |fm| {
-             if (fm != m) continue;
+            if (fm != m) continue;
         }
         for (workloads) |w| {
             if (config.filter_workload) |fw| {
-                 if (fw != w) continue;
-             }
+                if (fw != w) continue;
+            }
             try runBenchmark(allocator, m, w, config);
         }
     }

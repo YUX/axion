@@ -16,7 +16,7 @@ pub const RegistryKey = struct {
 };
 
 pub const TxnEntry = struct {
-    txn: *Transaction, 
+    txn: *Transaction,
     ref_count: usize,
     rolled_back: bool,
 };
@@ -67,7 +67,7 @@ pub var vtab_registry_mutex = std.Thread.Mutex{};
 pub var vtab_registry: ?std.StringHashMap(*AxionVTab) = null;
 
 pub fn getVTabRegistryKey(alloc: std.mem.Allocator, conn: *c.sqlite3, name: []const u8) ![]u8 {
-    return std.fmt.allocPrint(alloc, "{*}:{s}", .{conn, name});
+    return std.fmt.allocPrint(alloc, "{*}:{s}", .{ conn, name });
 }
 
 // --- VTab & Cursor Structs ---
@@ -83,15 +83,15 @@ pub const AxionCursor = extern struct {
     base: c.sqlite3_vtab_cursor,
     iter: ?*Iterator,
     val_ref_ptr: ?*anyopaque, // *SSTable.ValueRef
-    
+
     current_key_ptr: ?[*]const u8,
     current_key_len: usize,
     current_value_ptr: ?[*]const u8,
     current_value_len: usize,
-    
+
     read_txn_id: u64,
     read_txn_ver: u64,
-    
+
     is_eof: bool,
     is_point_lookup: bool,
 
@@ -107,22 +107,17 @@ pub const AxionCursor = extern struct {
     scan_idx_id: u32,
     scan_idx_cols: u32,
     scan_idx_eq_mode: bool,
-    
+
     decoded_row_ptr: ?[*]Row.Row.Value,
     decoded_row_len: usize,
-    
+
     arena: *std.heap.ArenaAllocator,
 };
 
 pub fn mapZigError(err: anyerror) c_int {
     return switch (err) {
         error.OutOfMemory => c.SQLITE_NOMEM,
-        error.DiskQuota,
-        error.InputOutput,
-        error.SystemResources,
-        error.AccessDenied,
-        error.BrokenPipe,
-        error.ConnectionResetByPeer => c.SQLITE_IOERR,
+        error.DiskQuota, error.InputOutput, error.SystemResources, error.AccessDenied, error.BrokenPipe, error.ConnectionResetByPeer => c.SQLITE_IOERR,
         error.DatabaseCompromised => c.SQLITE_CORRUPT,
         else => c.SQLITE_ERROR,
     };

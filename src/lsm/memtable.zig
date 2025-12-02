@@ -94,14 +94,14 @@ const Shard = struct {
 
         const node_size = @sizeOf(Node);
         const total_size = node_size + key.len + value.len;
-        
+
         // Single allocation for Node + Key + Value
         const buffer = try self.allocator.alignedAlloc(u8, std.mem.Alignment.fromByteUnits(@alignOf(Node)), total_size);
         const new_node = @as(*Node, @ptrCast(buffer.ptr));
-        
+
         const key_dest = buffer[node_size..][0..key.len];
-        const val_dest = buffer[node_size + key.len..][0..value.len];
-        
+        const val_dest = buffer[node_size + key.len ..][0..value.len];
+
         @memcpy(key_dest, key);
         @memcpy(val_dest, value);
 
@@ -177,13 +177,13 @@ const Shard = struct {
         }
         return null;
     }
-    
+
     pub const Iterator = struct {
         const BATCH_SIZE = 64;
-        
+
         shard: *Shard,
         current: ?*Node,
-        
+
         // Batching
         batch_buffer: [BATCH_SIZE]MemTable.Iterator.Entry = undefined,
         batch_len: usize = 0,
@@ -219,7 +219,7 @@ const Shard = struct {
                 self.batch_idx += 1;
                 return entry;
             }
-            
+
             if (self.current == null) return null;
 
             // Refill Batch
@@ -228,14 +228,14 @@ const Shard = struct {
 
             // Re-check current in case it was removed (not possible in append-only, but good practice)
             // Actually, self.current is a pointer. If it's valid, we are good.
-            
+
             self.batch_len = 0;
             self.batch_idx = 0;
-            
+
             var ptr = self.current;
             while (ptr) |node| {
                 if (self.batch_len >= BATCH_SIZE) break;
-                
+
                 self.batch_buffer[self.batch_len] = MemTable.Iterator.Entry{
                     .key = node.key,
                     .value = node.value,
@@ -253,7 +253,7 @@ const Shard = struct {
             }
             return null;
         }
-        
+
         pub fn deinit(self: *Iterator) void {
             _ = self;
         }
@@ -354,7 +354,7 @@ pub const MemTable = struct {
             }
             try self.heap_iter.reset();
         }
-        
+
         pub fn next(self: *Iterator) !?Entry {
             return self.heap_iter.next();
         }
@@ -371,11 +371,11 @@ pub const MemTable = struct {
     pub fn iterator(self: *MemTable) !Iterator {
         const shard_iters = try self.allocator.alloc(Shard.Iterator, SHARD_COUNT);
         errdefer self.allocator.free(shard_iters);
-        
+
         for (0..SHARD_COUNT) |i| {
             shard_iters[i] = self.shards[i].iterator();
         }
-        
+
         var it = Iterator{
             .shard_iters = shard_iters,
             .heap_iter = undefined,

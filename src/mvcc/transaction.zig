@@ -27,24 +27,15 @@ pub const TransactionManager = struct {
     storage_iterator_fn: *const fn (ptr: *anyopaque, read_version: u64) anyerror!Iterator,
     storage_latest_ver_fn: *const fn (ptr: *anyopaque, key: []const u8) ?u64,
     global_version: std.atomic.Value(u64),
-    
+
     // Replaced commit_mutex with batcher
     batcher: *CommitBatcher,
-    
+
     // Sharded Active Transactions to reduce contention
     active_shards: []ActiveTxnShard,
     next_txn_id: std.atomic.Value(u64),
 
-    pub fn create(
-        allocator: std.mem.Allocator,
-        memtable: *MemTable,
-        wal: *WAL,
-        storage_ptr: *anyopaque,
-        storage_read_fn: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, key: []const u8, version: u64) anyerror!?SSTable.ValueRef,
-        storage_iterator_fn: *const fn (ptr: *anyopaque, read_version: u64) anyerror!Iterator,
-        storage_latest_ver_fn: *const fn (ptr: *anyopaque, key: []const u8) ?u64,
-        initial_version: u64
-    ) !*TransactionManager {
+    pub fn create(allocator: std.mem.Allocator, memtable: *MemTable, wal: *WAL, storage_ptr: *anyopaque, storage_read_fn: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, key: []const u8, version: u64) anyerror!?SSTable.ValueRef, storage_iterator_fn: *const fn (ptr: *anyopaque, read_version: u64) anyerror!Iterator, storage_latest_ver_fn: *const fn (ptr: *anyopaque, key: []const u8) ?u64, initial_version: u64) !*TransactionManager {
         const shards = try allocator.alloc(ActiveTxnShard, SHARD_COUNT);
         for (shards) |*s| {
             s.mutex = std.Thread.Mutex{};
@@ -65,13 +56,13 @@ pub const TransactionManager = struct {
             .active_shards = shards,
             .next_txn_id = std.atomic.Value(u64).init(1),
         };
-        
+
         // Safe to initialize batcher now that self is on heap
         self.batcher = try CommitBatcher.init(allocator, self);
-        
+
         return self;
     }
-    
+
     // Deprecated: initBatcher is merged into create
 
     pub fn destroy(self: *TransactionManager) void {
@@ -101,7 +92,7 @@ pub const TransactionManager = struct {
 
         const shard_idx = id % SHARD_COUNT;
         const shard = &self.active_shards[shard_idx];
-        
+
         shard.mutex.lock();
         try shard.map.put(id, ver);
         shard.mutex.unlock();
@@ -112,7 +103,7 @@ pub const TransactionManager = struct {
     pub fn deregister(self: *TransactionManager, id: u64) void {
         const shard_idx = id % SHARD_COUNT;
         const shard = &self.active_shards[shard_idx];
-        
+
         shard.mutex.lock();
         _ = shard.map.remove(id);
         shard.mutex.unlock();
@@ -120,7 +111,7 @@ pub const TransactionManager = struct {
 
     pub fn getMinActiveVersion(self: *TransactionManager) u64 {
         var min: u64 = self.global_version.load(.acquire);
-        
+
         for (self.active_shards) |*s| {
             s.mutex.lock();
             var it = s.map.valueIterator();
@@ -145,9 +136,9 @@ pub const TransactionManager = struct {
 
         const shard_idx = id % SHARD_COUNT;
         const shard = &self.active_shards[shard_idx];
-        
+
         shard.mutex.lock();
-        shard.map.put(id, ver) catch {}; 
+        shard.map.put(id, ver) catch {};
         shard.mutex.unlock();
 
         return ReadOnlyTransaction{ .id = id, .read_version = ver };
@@ -161,18 +152,18 @@ pub const TransactionManager = struct {
         // Submit to Batcher
         var req = CommitRequest{ .txn = txn };
         self.batcher.submit(&req);
-        
+
         // Wait for completion
         // Wait on Futex. 0 = Pending, 1 = Done.
         while (req.done.load(.acquire) == 0) {
             std.Thread.Futex.wait(&req.done, 0);
         }
-        
+
         if (req.status == .Conflict) {
             return error.Conflict;
         }
     }
-    
+
     // Helpers for Batcher
     pub fn prepareTxnBuffer(self: *TransactionManager, txn: *Transaction, commit_ver: u64) void {
         _ = self;
@@ -181,22 +172,22 @@ pub const TransactionManager = struct {
         while (i < items.len) {
             const ver_offset = i + 4;
             std.mem.writeInt(u64, items[ver_offset..][0..8], commit_ver, .little);
-            
+
             const kl_offset = i + 12;
             const vl_offset = i + 16;
             const key_len = std.mem.readInt(u32, items[kl_offset..][0..4], .little);
             const val_len = std.mem.readInt(u32, items[vl_offset..][0..4], .little);
-            
+
             const entry_len = RecordFormat.HEADER_SIZE + key_len + val_len;
-            
+
             var crc = std.hash.Crc32.init();
             crc.update(items[ver_offset .. i + entry_len]);
             std.mem.writeInt(u32, items[i..][0..4], crc.final(), .little);
-            
+
             i += entry_len;
         }
     }
-    
+
     pub fn applyToMemTable(self: *TransactionManager, txn: *Transaction, commit_ver: u64) !void {
         var it = txn.buffer.iterator();
         while (it.next()) |entry| {
@@ -206,7 +197,6 @@ pub const TransactionManager = struct {
         }
     }
 };
-
 
 pub const Transaction = struct {
     // Savepoint Support
@@ -227,7 +217,7 @@ pub const Transaction = struct {
     buffer: std.StringHashMap([]const u8),
     wal_buffer: std.ArrayListUnmanaged(u8), // Pre-serialized log entries
     arena: std.heap.ArenaAllocator,
-    
+
     undo_log: std.ArrayListUnmanaged(UndoLogEntry),
     savepoints: std.ArrayListUnmanaged(Savepoint),
 
@@ -266,15 +256,15 @@ pub const Transaction = struct {
                 defer ref.deinit();
                 old_val = try arena_alloc.dupe(u8, ref.data);
             }
-            
+
             try self.undo_log.append(self.allocator, .{
-                .key = key_copy, 
+                .key = key_copy,
                 .old_value = old_val,
             });
         }
 
         try self.buffer.put(key_copy, val_copy);
-        
+
         // Pre-serialize to WAL buffer
         try RecordFormat.encodePlaceholders(&self.wal_buffer, self.allocator, key, value);
     }
@@ -282,7 +272,7 @@ pub const Transaction = struct {
     pub fn delete(self: *Transaction, key: []const u8) !void {
         try self.put(key, "");
     }
-    
+
     pub fn savepoint(self: *Transaction, id: c_int) !void {
         try self.savepoints.append(self.allocator, .{
             .id = id,
@@ -290,14 +280,14 @@ pub const Transaction = struct {
             .undo_len = self.undo_log.items.len,
         });
     }
-    
+
     pub fn releaseSavepoint(self: *Transaction, id: c_int) void {
         // Release means we commit this savepoint (merge it into parent or txn).
         // SQLite assumes savepoints are nested. Release id releases id AND all subsequent nested savepoints?
         // "The RELEASE command releases a savepoint... and any savepoints that have been created since."
         // So we remove 'id' and everything after it from the stack.
         // But we KEEP the changes (undo log remains).
-        
+
         var i: usize = self.savepoints.items.len;
         while (i > 0) {
             i -= 1;
@@ -308,7 +298,7 @@ pub const Transaction = struct {
         }
         // If not found? Ignore.
     }
-    
+
     pub fn rollbackTo(self: *Transaction, id: c_int) !void {
         // Find savepoint
         var target_idx: ?usize = null;
@@ -320,13 +310,13 @@ pub const Transaction = struct {
                 break;
             }
         }
-        
+
         if (target_idx) |idx| {
             const sp = self.savepoints.items[idx];
-            
+
             // 1. Truncate WAL Buffer
             self.wal_buffer.shrinkRetainingCapacity(sp.wal_len);
-            
+
             // 2. Replay Undo Log
             var j: usize = self.undo_log.items.len;
             while (j > sp.undo_len) {
@@ -339,7 +329,7 @@ pub const Transaction = struct {
                 }
             }
             self.undo_log.shrinkRetainingCapacity(sp.undo_len);
-            
+
             // 3. Remove subsequent savepoints (BUT KEEP 'id' savepoint? No, SQLite says ROLLBACK TO retains the savepoint).
             // "The ROLLBACK TO command reverts the state... to what it was... The savepoint remains active."
             // So we remove everything AFTER `idx`.
@@ -370,14 +360,14 @@ pub const Transaction = struct {
     pub fn scan(self: *Transaction, start_key: []const u8) !MergedIterator {
         var iter = MergedIterator.init(self.allocator, self.read_version);
         errdefer iter.deinit();
-        
+
         const storage_iter = try self.manager.storage_iterator_fn(self.manager.storage_ptr, self.read_version);
         try iter.add(storage_iter);
-        
+
         // Add local buffer iterator with current read_version (which is > any committed version visible)
         const buf_iter = try Wrappers.HashMapIteratorWrapper.create(self.allocator, self.buffer, self.read_version);
         try iter.add(buf_iter);
-        
+
         try iter.seek(start_key);
         return iter;
     }
@@ -411,7 +401,7 @@ const MockIterator = struct {
         self.inner.deinit();
     }
     pub fn iterator(self: *MockIterator) Iterator {
-         return Iterator{
+        return Iterator{
             .ptr = self,
             .vtable = &vtable,
         };
@@ -534,7 +524,7 @@ test "Transaction conflict detection" {
 
     // Txn 2 tries to modify "key1"
     try txn2.put("key1", "value2");
-    
+
     // Txn 2 should fail to commit because it read at v1, but key1 is at v2.
     try std.testing.expectError(error.Conflict, txn2.commit());
 }

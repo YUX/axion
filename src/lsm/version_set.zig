@@ -96,13 +96,13 @@ pub const Version = struct {
                     const table = level.items[j];
                     if (keyInRange(key, table.min_key, table.max_key)) {
                         if (table.reader) |reader| {
-                             if (try reader.get(allocator, key, version)) |val_ref| {
-                                 if (val_ref.data.len == 0) {
-                                     val_ref.deinit();
-                                     return null;
-                                 }
-                                 return val_ref;
-                             }
+                            if (try reader.get(allocator, key, version)) |val_ref| {
+                                if (val_ref.data.len == 0) {
+                                    val_ref.deinit();
+                                    return null;
+                                }
+                                return val_ref;
+                            }
                         }
                     }
                 }
@@ -125,14 +125,14 @@ pub const Version = struct {
                 if (candidate_idx) |idx| {
                     const table = level.items[idx];
                     if (Comparator.compare(key, table.max_key) != .gt) {
-                         if (table.reader) |reader| {
-                             if (try reader.get(allocator, key, version)) |val_ref| {
-                                 if (val_ref.data.len == 0) {
-                                     val_ref.deinit();
-                                     return null;
-                                 }
-                                 return val_ref;
-                             }
+                        if (table.reader) |reader| {
+                            if (try reader.get(allocator, key, version)) |val_ref| {
+                                if (val_ref.data.len == 0) {
+                                    val_ref.deinit();
+                                    return null;
+                                }
+                                return val_ref;
+                            }
                         }
                     }
                 }
@@ -140,8 +140,8 @@ pub const Version = struct {
         }
         return null;
     }
-    
-     pub fn getLatestVersion(self: *Version, key: []const u8) !?u64 {
+
+    pub fn getLatestVersion(self: *Version, key: []const u8) !?u64 {
         // 1. MemTable
         if (self.memtable.getLatestVersion(key)) |ver| return ver;
 
@@ -162,7 +162,7 @@ pub const Version = struct {
                     const table = level.items[j];
                     if (keyInRange(key, table.min_key, table.max_key)) {
                         if (table.reader) |reader| {
-                             if (reader.getLatestVersion(key) catch null) |ver| return ver;
+                            if (reader.getLatestVersion(key) catch null) |ver| return ver;
                         }
                     }
                 }
@@ -185,8 +185,8 @@ pub const Version = struct {
                 if (candidate_idx) |idx| {
                     const table = level.items[idx];
                     if (Comparator.compare(key, table.max_key) != .gt) {
-                         if (table.reader) |reader| {
-                             if (reader.getLatestVersion(key) catch null) |ver| return ver;
+                        if (table.reader) |reader| {
+                            if (reader.getLatestVersion(key) catch null) |ver| return ver;
                         }
                     }
                 }
@@ -198,31 +198,31 @@ pub const Version = struct {
     pub fn createIterator(self: *Version, read_version: u64) !MergedIterator {
         var iter = MergedIterator.init(self.allocator, read_version);
         errdefer iter.deinit();
-        
+
         // 1. Active MemTable
         try iter.add(try Wrappers.MemTableIteratorWrapper.create(self.allocator, try self.memtable.iterator()));
-        
+
         // 2. Immutable MemTables
         for (self.immutables.items) |mem| {
             try iter.add(try Wrappers.MemTableIteratorWrapper.create(self.allocator, try mem.iterator()));
         }
-        
+
         // 3. SSTables
         for (self.levels, 0..) |level, i| {
-             if (i == 0) {
-                 for (level.items) |table| {
-                     if (table.reader) |reader_ptr| {
-                          const sst_iter = reader_ptr.iterator();
-                          try iter.add(try Wrappers.SSTableIteratorWrapper.create(self.allocator, sst_iter));
-                     }
-                 }
-             } else {
-                 if (level.items.len > 0) {
-                     const level_iter = try self.allocator.create(LevelIterator);
-                     level_iter.* = LevelIterator.init(self.allocator, level.items);
-                     try iter.add(level_iter.iterator());
-                 }
-             }
+            if (i == 0) {
+                for (level.items) |table| {
+                    if (table.reader) |reader_ptr| {
+                        const sst_iter = reader_ptr.iterator();
+                        try iter.add(try Wrappers.SSTableIteratorWrapper.create(self.allocator, sst_iter));
+                    }
+                }
+            } else {
+                if (level.items.len > 0) {
+                    const level_iter = try self.allocator.create(LevelIterator);
+                    level_iter.* = LevelIterator.init(self.allocator, level.items);
+                    try iter.add(level_iter.iterator());
+                }
+            }
         }
         return iter;
     }
@@ -236,7 +236,7 @@ pub const VersionSet = struct {
     allocator: Allocator,
     current: *Version,
     manifest: Manifest,
-    mutex: std.Thread.Mutex, 
+    mutex: std.Thread.Mutex,
     block_cache: *BlockCache,
     db_path: []const u8,
     compaction_cursors: [Manifest.MAX_LEVELS]usize,
@@ -248,7 +248,7 @@ pub const VersionSet = struct {
         self.block_cache = block_cache;
         self.mutex = .{};
         self.compaction_cursors = [_]usize{0} ** Manifest.MAX_LEVELS;
-        
+
         const manifest_path = try std.fs.path.join(allocator, &.{ db_path, "MANIFEST" });
         defer allocator.free(manifest_path);
         self.manifest = try Manifest.init(allocator, manifest_path);
@@ -256,12 +256,12 @@ pub const VersionSet = struct {
 
         self.current = try Version.init(allocator, mem);
         errdefer self.current.unref();
-        
+
         // Populate levels from manifest
         for (self.manifest.levels, 0..) |level, i| {
             for (level.items) |table_meta| {
                 var reader: ?*SSTable.Reader = null;
-                
+
                 // Open reader if available
                 const path = try getTablePath(allocator, db_path, table_meta.id);
                 defer allocator.free(path);
@@ -269,16 +269,8 @@ pub const VersionSet = struct {
 
                 // Create TableInfo (It takes ownership of keys, so we duplicate)
                 // And it takes ownership of Reader reference (if any)
-                const info = try TableInfo.init(
-                    allocator, 
-                    table_meta.id,
-                    table_meta.level,
-                    table_meta.min_key,
-                    table_meta.max_key,
-                    table_meta.file_size,
-                    reader
-                );
-                
+                const info = try TableInfo.init(allocator, table_meta.id, table_meta.level, table_meta.min_key, table_meta.max_key, table_meta.file_size, reader);
+
                 // We don't need to manually ref the reader here because init does it.
                 // But if we opened it, we have 1 ref. 'init' adds another.
                 // So we should unref our local ref.
@@ -287,7 +279,7 @@ pub const VersionSet = struct {
                 try self.current.levels[i].append(allocator, info);
             }
         }
-        
+
         return self;
     }
 
@@ -304,7 +296,7 @@ pub const VersionSet = struct {
         self.current.ref();
         return self.current;
     }
-    
+
     pub fn logAndApply(self: *VersionSet, edit: VersionEdit) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -312,16 +304,16 @@ pub const VersionSet = struct {
         // Create new Version
         const v = try Version.init(self.allocator, edit.new_memtable orelse self.current.memtable);
         errdefer v.unref();
-        
+
         // Copy Immutables
         if (edit.new_memtable != null) {
-             self.current.memtable.ref();
-             try v.immutables.append(self.allocator, self.current.memtable);
+            self.current.memtable.ref();
+            try v.immutables.append(self.allocator, self.current.memtable);
         }
-        
+
         for (self.current.immutables.items) |m| {
             if (edit.flushed_memtable) |flushed| {
-                if (m == flushed) continue; 
+                if (m == flushed) continue;
             }
             m.ref();
             try v.immutables.append(self.allocator, m);
@@ -329,58 +321,49 @@ pub const VersionSet = struct {
 
         // Copy Levels (Shallow Copy of TableInfo pointers + Ref)
         for (self.current.levels, 0..) |l, i| {
-             try v.levels[i].ensureTotalCapacity(self.allocator, l.items.len);
-             for (l.items) |t| {
-                 t.ref();
-                 v.levels[i].appendAssumeCapacity(t);
-             }
+            try v.levels[i].ensureTotalCapacity(self.allocator, l.items.len);
+            for (l.items) |t| {
+                t.ref();
+                v.levels[i].appendAssumeCapacity(t);
+            }
         }
 
         // Apply SSTable changes
         if (edit.tables_to_add.items.len > 0 or edit.tables_to_delete.items.len > 0) {
-             for (edit.tables_to_delete.items) |del_id| {
-                 for (&v.levels) |*l| {
-                     var i: usize = 0;
-                     while (i < l.items.len) {
-                         if (l.items[i].id == del_id) {
-                             const t = l.orderedRemove(i);
-                             t.unref(); 
-                         } else {
-                             i += 1;
-                         }
-                     }
-                 }
-             }
+            for (edit.tables_to_delete.items) |del_id| {
+                for (&v.levels) |*l| {
+                    var i: usize = 0;
+                    while (i < l.items.len) {
+                        if (l.items[i].id == del_id) {
+                            const t = l.orderedRemove(i);
+                            t.unref();
+                        } else {
+                            i += 1;
+                        }
+                    }
+                }
+            }
 
-             for (edit.tables_to_add.items) |meta| {
-                 // Convert Metadata -> TableInfo
-                 // We use init (copy keys) instead of stealing to allow VersionEdit to safely own its keys for retry/cleanup.
-                 // The cost of copying keys for a few new tables is negligible.
-                 const info = try TableInfo.init(
-                     self.allocator, 
-                     meta.id,
-                     meta.level,
-                     meta.min_key,
-                     meta.max_key,
-                     meta.file_size,
-                     meta.reader
-                 );
-                 
-                 try v.levels[meta.level].append(self.allocator, info);
-             }
+            for (edit.tables_to_add.items) |meta| {
+                // Convert Metadata -> TableInfo
+                // We use init (copy keys) instead of stealing to allow VersionEdit to safely own its keys for retry/cleanup.
+                // The cost of copying keys for a few new tables is negligible.
+                const info = try TableInfo.init(self.allocator, meta.id, meta.level, meta.min_key, meta.max_key, meta.file_size, meta.reader);
+
+                try v.levels[meta.level].append(self.allocator, info);
+            }
         }
-        
+
         // Update Manifest
         if (edit.tables_to_add.items.len > 0 or edit.tables_to_delete.items.len > 0) {
-             try self.manifest.apply(edit.tables_to_add.items, edit.tables_to_delete.items);
+            try self.manifest.apply(edit.tables_to_add.items, edit.tables_to_delete.items);
         }
-        
+
         const old = self.current;
         self.current = v;
         old.unref();
     }
 
-    
     fn getTablePath(allocator: Allocator, db_path: []const u8, file_id: u64) ![]const u8 {
         var buf: [64]u8 = undefined;
         const filename = try std.fmt.bufPrint(&buf, "table_{}.sst", .{file_id});

@@ -23,12 +23,12 @@ test "Savepoints and Nested Transactions" {
     // 2. Transaction with Savepoints
     _ = c.sqlite3_exec(db, "BEGIN;", null, null, null);
     _ = c.sqlite3_exec(db, "INSERT INTO users VALUES (2, 'Bob');", null, null, null);
-    
+
     // Savepoint 1
     _ = c.sqlite3_exec(db, "SAVEPOINT sp1;", null, null, null);
     _ = c.sqlite3_exec(db, "INSERT INTO users VALUES (3, 'Charlie');", null, null, null);
     _ = c.sqlite3_exec(db, "UPDATE users SET name = 'Alice 2' WHERE id = 1;", null, null, null);
-    
+
     // Verify Charlie exists
     {
         var stmt: ?*c.sqlite3_stmt = null;
@@ -41,7 +41,7 @@ test "Savepoints and Nested Transactions" {
 
     // Rollback to sp1
     _ = c.sqlite3_exec(db, "ROLLBACK TO sp1;", null, null, null);
-    
+
     // Verify Charlie is GONE, Alice is restored
     {
         var stmt: ?*c.sqlite3_stmt = null;
@@ -50,7 +50,7 @@ test "Savepoints and Nested Transactions" {
             try std.testing.expectEqual(0, c.sqlite3_column_int64(stmt, 0));
             _ = c.sqlite3_finalize(stmt);
         }
-        
+
         if (c.sqlite3_prepare_v2(db, "SELECT name FROM users WHERE id=1", -1, &stmt, null) == c.SQLITE_OK) {
             _ = c.sqlite3_step(stmt);
             const name = c.sqlite3_column_text(stmt, 0);
@@ -58,7 +58,7 @@ test "Savepoints and Nested Transactions" {
             _ = c.sqlite3_finalize(stmt);
         }
     }
-    
+
     // Verify Bob remains
     {
         var stmt: ?*c.sqlite3_stmt = null;
@@ -71,7 +71,7 @@ test "Savepoints and Nested Transactions" {
 
     // Commit
     _ = c.sqlite3_exec(db, "COMMIT;", null, null, null);
-    
+
     // Re-Verify persistence
     {
         var stmt: ?*c.sqlite3_stmt = null;

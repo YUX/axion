@@ -37,9 +37,9 @@ pub const DB = struct {
 
     allocator: std.mem.Allocator,
     options: DBOptions,
-    
+
     versions: *VersionSet, // Manages Version, Manifest, MemTables
-    
+
     wal: WAL,
     tm: *TransactionManager,
     db_path: []const u8,
@@ -48,7 +48,7 @@ pub const DB = struct {
     flush_thread: std.Thread,
     flush_mutex: std.Thread.Mutex,
     flush_cond: std.Thread.Condition,
-    
+
     // Background Compaction
     compaction_threads: []std.Thread,
     compaction_mutex: std.Thread.Mutex,
@@ -56,11 +56,11 @@ pub const DB = struct {
 
     running: std.atomic.Value(bool),
     bg_error: std.atomic.Value(usize),
-    
+
     // Flow Control
     flow_mutex: std.Thread.Mutex,
     flow_cond: std.Thread.Condition,
-    
+
     const MAX_PENDING_MEMTABLES = 8;
 
     pub fn open(allocator: std.mem.Allocator, dir_path: []const u8, options: DBOptions) !*DB {
@@ -68,7 +68,7 @@ pub const DB = struct {
         self.allocator = allocator;
         self.options = options;
         self.db_path = try allocator.dupe(u8, dir_path);
-        
+
         // Initialize Block Cache
         const block_cache = BlockCache.init(allocator, options.block_cache_size_bytes);
         const bc_ptr = try allocator.create(BlockCache);
@@ -86,7 +86,7 @@ pub const DB = struct {
         // Initialize VersionSet
         // VersionSet.init calls Version.init, which REFs the memtable. ref=2.
         self.versions = try VersionSet.init(allocator, dir_path, bc_ptr, memtable);
-        
+
         // We don't need our reference anymore.
         memtable.unref(); // ref=1 (held by Version)
 
@@ -117,25 +117,25 @@ pub const DB = struct {
         {
             const v = self.versions.getCurrent();
             defer v.unref();
-            
+
             self.tm = try TransactionManager.create(allocator, v.memtable, &self.wal, self, storageGet, storageIterator, storageGetLatestVersion, max_version);
         }
-        
+
         // Start Background Threads
         self.running = std.atomic.Value(bool).init(true);
         self.bg_error = std.atomic.Value(usize).init(0);
-        
+
         self.flush_mutex = std.Thread.Mutex{};
         self.flush_cond = std.Thread.Condition{};
-        
+
         self.compaction_mutex = std.Thread.Mutex{};
         self.compaction_cond = std.Thread.Condition{};
-        
+
         self.flow_mutex = std.Thread.Mutex{};
         self.flow_cond = std.Thread.Condition{};
-        
+
         self.flush_thread = try std.Thread.spawn(.{}, flushLoop, .{self});
-        
+
         const num_compaction_threads = if (options.compaction_threads > 0) options.compaction_threads else 1;
         self.compaction_threads = try allocator.alloc(std.Thread, num_compaction_threads);
         for (self.compaction_threads) |*t| {
@@ -148,15 +148,15 @@ pub const DB = struct {
     pub fn close(self: *DB) void {
         // Stop bg threads
         self.running.store(false, .release);
-        
+
         self.flush_mutex.lock();
         self.flush_cond.signal();
         self.flush_mutex.unlock();
-        
+
         self.compaction_mutex.lock();
         self.compaction_cond.broadcast();
         self.compaction_mutex.unlock();
-        
+
         self.flush_thread.join();
         for (self.compaction_threads) |t| {
             t.join();
@@ -165,15 +165,15 @@ pub const DB = struct {
 
         self.tm.destroy();
         self.wal.deinit();
-        
+
         // We should free the block cache pointer we allocated
         const bc_ptr = self.versions.block_cache;
-        
+
         self.versions.deinit();
-        
+
         bc_ptr.deinit();
         self.allocator.destroy(bc_ptr);
-        
+
         self.allocator.free(self.db_path);
         self.allocator.destroy(self);
     }
@@ -198,7 +198,7 @@ pub const DB = struct {
         defer v.unref();
         return v.getLatestVersion(key) catch null;
     }
-    
+
     pub fn getLatestCommitVersion(self: *DB, key: []const u8) ?u64 {
         const v = self.versions.getCurrent();
         defer v.unref();
@@ -216,18 +216,18 @@ pub const DB = struct {
         // Check flow control
         self.flow_mutex.lock();
         defer self.flow_mutex.unlock();
-        
+
         while (true) {
             const v = self.versions.getCurrent();
             const pending = v.immutables.items.len;
             v.unref();
 
             if (pending < MAX_PENDING_MEMTABLES) break;
-            
+
             self.flow_cond.wait(&self.flow_mutex);
             try self.checkBgError();
         }
-        
+
         // Check current memtable size
         const v = self.versions.getCurrent();
         const size = v.memtable.approxSize();
@@ -293,7 +293,7 @@ pub const DB = struct {
                 const new_idx_key = try CompositeKey.encodeIndexKey(self.allocator, up.id, new_val, key);
                 defer self.allocator.free(new_idx_key);
                 // The value of the index entry is arbitrary but must be non-empty to distinguish from deletion (tombstone).
-                try txn.put(new_idx_key, "\x01"); 
+                try txn.put(new_idx_key, "\x01");
             }
         }
 
@@ -306,7 +306,7 @@ pub const DB = struct {
         // Create a base iterator using the current global version as the snapshot.
         const read_ver = self.tm.global_version.load(.acquire);
         var iter = try self.createIterator(read_ver);
-        
+
         // Construct the seek key
         // If start_value is provided, we seek to that value.
         // If not, we seek to the start of the index (empty value).
@@ -336,20 +336,20 @@ pub const DB = struct {
             return;
         }
         v.unref();
-        
+
         var edit = VersionEdit.init(self.allocator);
         defer edit.deinit();
         edit.new_memtable = new_mem;
 
         try self.versions.logAndApply(edit);
         edit.release();
-        
+
         // We unref new_mem. Version owns it now.
         new_mem.unref();
-        
+
         // Update TM reference!
         self.tm.memtable = new_mem;
-        
+
         // Signal Flush Thread
         self.flush_mutex.lock();
         self.flush_cond.signal();
@@ -366,14 +366,14 @@ pub const DB = struct {
                 has_work = v.immutables.items.len > 0;
                 v.unref();
             }
-            
+
             if (!has_work and self.running.load(.monotonic)) {
                 self.flush_cond.wait(&self.flush_mutex);
             }
             self.flush_mutex.unlock();
-            
+
             if (!self.running.load(.monotonic)) break;
-            
+
             // Process one memtable
             var mem_to_flush: ?*MemTable = null;
             {
@@ -395,12 +395,12 @@ pub const DB = struct {
                 };
                 metrics.global.flush();
                 mem.unref();
-                
+
                 // Signal writers that space is available
                 self.flow_mutex.lock();
                 self.flow_cond.broadcast();
                 self.flow_mutex.unlock();
-                
+
                 // Signal Compaction that new file exists
                 self.compaction_mutex.lock();
                 self.compaction_cond.signal();
@@ -411,18 +411,18 @@ pub const DB = struct {
 
     fn compactionLoop(self: *DB) void {
         const CompactionPolicy = @import("lsm/compaction.zig").CompactionPolicy;
-        
+
         while (self.running.load(.monotonic)) {
-             // Wait for signal or timeout (to check periodically)
-             self.compaction_mutex.lock();
-             if (self.running.load(.monotonic)) {
-                  self.compaction_cond.timedWait(&self.compaction_mutex, 100 * std.time.ns_per_ms) catch {};
-             }
-             self.compaction_mutex.unlock();
-             
-             if (!self.running.load(.monotonic)) break;
-             
-             while (true) {
+            // Wait for signal or timeout (to check periodically)
+            self.compaction_mutex.lock();
+            if (self.running.load(.monotonic)) {
+                self.compaction_cond.timedWait(&self.compaction_mutex, 100 * std.time.ns_per_ms) catch {};
+            }
+            self.compaction_mutex.unlock();
+
+            if (!self.running.load(.monotonic)) break;
+
+            while (true) {
                 if (self.bg_error.load(.acquire) != 0) break;
 
                 // Check for compaction work
@@ -432,32 +432,32 @@ pub const DB = struct {
                     // and to atomic check-and-set is_compacting flags.
                     self.versions.mutex.lock();
                     defer self.versions.mutex.unlock();
-                    
+
                     const v = self.versions.current;
                     v.ref();
                     defer v.unref();
-                    
+
                     task_opt = CompactionPolicy.pick(self.allocator, &v.levels, &self.versions.compaction_cursors, .{
                         .l0_file_limit = self.options.l0_file_limit,
                         .l1_size_limit = self.options.l1_size_bytes,
                     }) catch null;
                 }
-                
+
                 if (task_opt) |*task| {
-                     // Run Compaction
-                     self.executeCompaction(task) catch |err| {
-                          log.err(.compaction, "Compaction Error: {}", .{err});
-                          // Error handling done in executeCompaction cleanup
-                     };
-                     task.deinit(self.allocator);
-                     // Loop again to check for more work
+                    // Run Compaction
+                    self.executeCompaction(task) catch |err| {
+                        log.err(.compaction, "Compaction Error: {}", .{err});
+                        // Error handling done in executeCompaction cleanup
+                    };
+                    task.deinit(self.allocator);
+                    // Loop again to check for more work
                 } else {
                     break; // No more work
                 }
-             }
+            }
         }
     }
-    
+
     pub fn getTablePath(self: *DB, file_id: u64) ![]const u8 {
         var buf: [64]u8 = undefined;
         const filename = try std.fmt.bufPrint(&buf, "table_{}.sst", .{file_id});
@@ -466,14 +466,14 @@ pub const DB = struct {
 
     fn flushMemTableToDisk(self: *DB, mem: *MemTable) !void {
         if (mem.approxSize() == 0) {
-             var edit = VersionEdit.init(self.allocator);
-             defer edit.deinit();
-             edit.flushed_memtable = mem;
-             try self.versions.logAndApply(edit);
-             edit.release();
-             return;
+            var edit = VersionEdit.init(self.allocator);
+            defer edit.deinit();
+            edit.flushed_memtable = mem;
+            try self.versions.logAndApply(edit);
+            edit.release();
+            return;
         }
-        
+
         self.versions.mutex.lock();
         const file_id = self.versions.manifest.getNextFileId();
         self.versions.mutex.unlock();
@@ -503,36 +503,36 @@ pub const DB = struct {
         const f_size = try builder.finish();
 
         if (min_key) |min| {
-             const min_dup = try self.allocator.dupe(u8, min);
-             const max_dup = try self.allocator.dupe(u8, max_key.?);
-             
-             const reader = try SSTable.Reader.open(self.allocator, path, self.versions.block_cache);
+            const min_dup = try self.allocator.dupe(u8, min);
+            const max_dup = try self.allocator.dupe(u8, max_key.?);
 
-             var edit = VersionEdit.init(self.allocator);
-             defer edit.deinit();
-             
-             edit.flushed_memtable = mem;
-             try edit.tables_to_add.append(self.allocator, .{
-                 .id = file_id,
-                 .level = 0,
-                 .min_key = min_dup,
-                 .max_key = max_dup,
-                 .file_size = f_size,
-                 .max_version = max_version,
-                 .reader = reader,
-             });
-             
-             try self.versions.logAndApply(edit);
-             edit.release();
+            const reader = try SSTable.Reader.open(self.allocator, path, self.versions.block_cache);
+
+            var edit = VersionEdit.init(self.allocator);
+            defer edit.deinit();
+
+            edit.flushed_memtable = mem;
+            try edit.tables_to_add.append(self.allocator, .{
+                .id = file_id,
+                .level = 0,
+                .min_key = min_dup,
+                .max_key = max_dup,
+                .file_size = f_size,
+                .max_version = max_version,
+                .reader = reader,
+            });
+
+            try self.versions.logAndApply(edit);
+            edit.release();
         } else {
-             var edit = VersionEdit.init(self.allocator);
-             defer edit.deinit();
-             edit.flushed_memtable = mem;
-             try self.versions.logAndApply(edit);
-             edit.release();
+            var edit = VersionEdit.init(self.allocator);
+            defer edit.deinit();
+            edit.flushed_memtable = mem;
+            try self.versions.logAndApply(edit);
+            edit.release();
         }
     }
-    
+
     fn dbIdGen(ctx: *anyopaque) u64 {
         const self: *DB = @ptrCast(@alignCast(ctx));
         self.versions.mutex.lock();
@@ -549,7 +549,7 @@ pub const DB = struct {
 
         var inputs = std.ArrayListUnmanaged([]const u8){};
         var old_ids = std.ArrayListUnmanaged(u64){};
-        
+
         defer {
             for (inputs.items) |p| self.allocator.free(p);
             inputs.deinit(self.allocator);
@@ -568,20 +568,14 @@ pub const DB = struct {
             try inputs.append(self.allocator, p);
         }
 
-        const target_size = 64 * 1024 * 1024; 
-        
-        var results = try Compaction.compact(
-            self.allocator, 
-            inputs.items, 
-            self.db_path, 
-            self.tm.getMinActiveVersion(),
-            target_size,
-            self,
-            dbIdGen
-        );
-        
+        const target_size = 64 * 1024 * 1024;
+
+        var results = try Compaction.compact(self.allocator, inputs.items, self.db_path, self.tm.getMinActiveVersion(), target_size, self, dbIdGen);
+
         defer {
-            for (results.items) |*r| { _ = r; }
+            for (results.items) |*r| {
+                _ = r;
+            }
             results.deinit(self.allocator);
         }
 
@@ -589,45 +583,45 @@ pub const DB = struct {
             metrics.global.compaction();
             var edit = VersionEdit.init(self.allocator);
             defer edit.deinit();
-            
+
             try edit.tables_to_delete.appendSlice(self.allocator, old_ids.items);
 
             for (results.items) |res| {
                 const path = try self.getTablePath(res.id);
                 defer self.allocator.free(path);
-                
+
                 const reader = try SSTable.Reader.open(self.allocator, path, self.versions.block_cache);
-                
+
                 try edit.tables_to_add.append(self.allocator, .{
                     .id = res.id,
                     .level = task.level + 1,
-                    .min_key = res.min_key, 
-                                         .max_key = res.max_key, 
-                                        .file_size = res.file_size,
-                                        .max_version = res.max_version,
-                                        .reader = reader,
-                                    });
-                                }
+                    .min_key = res.min_key,
+                    .max_key = res.max_key,
+                    .file_size = res.file_size,
+                    .max_version = res.max_version,
+                    .reader = reader,
+                });
+            }
             try self.versions.logAndApply(edit);
             edit.release();
-            
+
             for (inputs.items) |p| {
                 std.fs.cwd().deleteFile(p) catch |err| {
                     if (err != error.FileNotFound) {
-                        log.warn(.compaction, "Failed to delete compacted file {s}: {}", .{p, err});
+                        log.warn(.compaction, "Failed to delete compacted file {s}: {}", .{ p, err });
                     }
                 };
             }
         }
     }
-        pub fn flushSync(self: *DB) !void {
+    pub fn flushSync(self: *DB) !void {
         try self.rotateMemTable();
-        
+
         while (true) {
             const v = self.versions.getCurrent();
             const len = v.immutables.items.len;
             v.unref();
-            
+
             if (len == 0) break;
             std.Thread.yield() catch {};
         }
@@ -647,11 +641,11 @@ pub const DB = struct {
         const merged = try v.createIterator(read_version);
         return SnapshotIterator.init(self.allocator, merged, v);
     }
-    
+
     fn getAtVersion(self: *DB, allocator: std.mem.Allocator, key: []const u8, version: u64) !?SSTable.ValueRef {
-         const v = self.versions.getCurrent();
-         defer v.unref();
-         return v.get(allocator, key, version);
+        const v = self.versions.getCurrent();
+        defer v.unref();
+        return v.get(allocator, key, version);
     }
 
     pub fn backup(self: *DB, backup_path: []const u8) !void {
@@ -669,21 +663,21 @@ pub const DB = struct {
         defer current_version.unref(); // Release ref after backup is complete
 
         // 3. Copy MANIFEST file
-        const manifest_src_path = try std.fs.path.join(self.allocator, &.{self.db_path, "MANIFEST"});
+        const manifest_src_path = try std.fs.path.join(self.allocator, &.{ self.db_path, "MANIFEST" });
         defer self.allocator.free(manifest_src_path);
-        const manifest_dst_path = try std.fs.path.join(self.allocator, &.{backup_path, "MANIFEST"});
+        const manifest_dst_path = try std.fs.path.join(self.allocator, &.{ backup_path, "MANIFEST" });
         defer self.allocator.free(manifest_dst_path);
-        
+
         std.fs.cwd().copyFile(manifest_src_path, std.fs.cwd(), manifest_dst_path, .{}) catch |err| {
             if (err != error.FileNotFound) return err; // If no manifest, then it's a fresh DB
         };
 
         // 4. Copy WAL file
-        const wal_src_path = try std.fs.path.join(self.allocator, &.{self.db_path, "WAL"});
+        const wal_src_path = try std.fs.path.join(self.allocator, &.{ self.db_path, "WAL" });
         defer self.allocator.free(wal_src_path);
-        const wal_dst_path = try std.fs.path.join(self.allocator, &.{backup_path, "WAL"});
+        const wal_dst_path = try std.fs.path.join(self.allocator, &.{ backup_path, "WAL" });
         defer self.allocator.free(wal_dst_path);
-        
+
         std.fs.cwd().copyFile(wal_src_path, std.fs.cwd(), wal_dst_path, .{}) catch |err| {
             if (err != error.FileNotFound) return err; // If no wal, then it's a fresh DB
         };
@@ -693,10 +687,10 @@ pub const DB = struct {
             for (level.items) |table_info| {
                 const sst_src_path = try self.getTablePath(table_info.id);
                 defer self.allocator.free(sst_src_path);
-                
+
                 const sst_dst_filename = try std.fmt.allocPrint(self.allocator, "table_{}.sst", .{table_info.id});
                 defer self.allocator.free(sst_dst_filename);
-                const sst_dst_path = try std.fs.path.join(self.allocator, &.{backup_path, sst_dst_filename});
+                const sst_dst_path = try std.fs.path.join(self.allocator, &.{ backup_path, sst_dst_filename });
                 defer self.allocator.free(sst_dst_path);
 
                 std.fs.cwd().copyFile(sst_src_path, std.fs.cwd(), sst_dst_path, .{}) catch |err| {
@@ -711,7 +705,7 @@ test "DB integration" {
     const allocator = std.testing.allocator;
     var buf: [64]u8 = undefined;
     const test_path = try std.fmt.bufPrint(&buf, "test_db_dir_{}", .{std.crypto.random.int(u64)});
-    
+
     std.fs.cwd().deleteTree(test_path) catch {};
     defer std.fs.cwd().deleteTree(test_path) catch {};
 

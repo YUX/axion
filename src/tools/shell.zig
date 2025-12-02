@@ -6,7 +6,7 @@ const metrics = @import("axion").metrics;
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
-    
+
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
@@ -114,10 +114,10 @@ pub fn main() !void {
             return;
         };
         defer stdin_file.close();
-        
+
         var buf: [4096]u8 = undefined;
         std.debug.print("Axion Shell.\nType SQL commands ending with ';'. Type .stats for metrics. Type .exit to quit.\n", .{});
-        
+
         var query_buf = std.ArrayListUnmanaged(u8){};
         defer query_buf.deinit(allocator);
 
@@ -145,20 +145,20 @@ pub fn main() !void {
                 if (std.mem.indexOf(u8, items, "\n")) |idx| {
                     const line = items[0..idx];
                     const trimmed = std.mem.trim(u8, line, " \r\t");
-                    
+
                     if (std.mem.eql(u8, trimmed, ".exit") or std.mem.eql(u8, trimmed, ".quit")) return;
                     if (std.mem.eql(u8, trimmed, ".stats")) {
                         printMetrics();
                     } else if (trimmed.len > 0) {
                         try query_buf.appendSlice(allocator, trimmed);
                         if (std.mem.endsWith(u8, trimmed, ";")) {
-                             execute(db, query_buf.items);
-                             query_buf.clearRetainingCapacity();
+                            execute(db, query_buf.items);
+                            query_buf.clearRetainingCapacity();
                         } else {
-                             try query_buf.append(allocator, ' ');
+                            try query_buf.append(allocator, ' ');
                         }
                     }
-                    
+
                     try partial_buf.replaceRange(allocator, 0, idx + 1, &.{});
                 } else {
                     break;
@@ -169,8 +169,7 @@ pub fn main() !void {
 }
 
 fn printUsage() void {
-    std.debug.print(
-        "Usage: axion [options] [db_path]\n" ++
+    std.debug.print("Usage: axion [options] [db_path]\n" ++
         "\n" ++
         "Options:\n" ++
         "  --config <file>       Load configuration from file\n" ++
@@ -180,15 +179,12 @@ fn printUsage() void {
         "  --sql <command>       Execute SQL command and exit\n" ++
         "  --help, -h            Show this help\n" ++
         "\n" ++
-        "If db_path is provided, the database is mounted as table 'data'.\n"
-        , .{}
-    );
+        "If db_path is provided, the database is mounted as table 'data'.\n", .{});
 }
 
 fn printMetrics() void {
     const m = metrics.global;
-    std.debug.print(
-        "--- Axion Metrics ---\n" ++
+    std.debug.print("--- Axion Metrics ---\n" ++
         "Puts: {}\n" ++
         "Gets: {}\n" ++
         "Iterators: {}\n" ++
@@ -198,19 +194,17 @@ fn printMetrics() void {
         "BlockCache Misses: {}\n" ++
         "Txn Success: {}\n" ++
         "Txn Conflict: {}\n" ++
-        "---------------------\n"
-        , .{
-            m.puts.load(.monotonic),
-            m.gets.load(.monotonic),
-            m.iterators.load(.monotonic),
-            m.compactions.load(.monotonic),
-            m.flushes.load(.monotonic),
-            m.block_cache_hits.load(.monotonic),
-            m.block_cache_misses.load(.monotonic),
-            m.txn_success.load(.monotonic),
-            m.txn_conflict.load(.monotonic),
-        }
-    );
+        "---------------------\n", .{
+        m.puts.load(.monotonic),
+        m.gets.load(.monotonic),
+        m.iterators.load(.monotonic),
+        m.compactions.load(.monotonic),
+        m.flushes.load(.monotonic),
+        m.block_cache_hits.load(.monotonic),
+        m.block_cache_misses.load(.monotonic),
+        m.txn_success.load(.monotonic),
+        m.txn_conflict.load(.monotonic),
+    });
 }
 
 fn execute(db: ?*c.sqlite3, sql: []const u8) void {
@@ -228,7 +222,7 @@ fn callback(notUsed: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, azColName: [*c]
     while (i < argc) : (i += 1) {
         const col = if (azColName[i] != null) std.mem.span(azColName[i]) else "NULL";
         const val = if (argv[i] != null) std.mem.span(argv[i]) else "NULL";
-        std.debug.print("{s} = {s}", .{col, val});
+        std.debug.print("{s} = {s}", .{ col, val });
         if (i < argc - 1) std.debug.print(" | ", .{});
     }
     std.debug.print("\n", .{});

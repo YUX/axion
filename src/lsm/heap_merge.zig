@@ -6,9 +6,9 @@ const Comparator = @import("comparator.zig");
 
 pub const NoOpCloner = struct {
     pub const active = false;
-    pub fn clone(allocator: Allocator, item: anytype) !@TypeOf(item) { 
+    pub fn clone(allocator: Allocator, item: anytype) !@TypeOf(item) {
         _ = allocator;
-        return item; 
+        return item;
     }
     pub fn free(allocator: Allocator, item: anytype) void {
         _ = allocator;
@@ -19,11 +19,7 @@ pub const NoOpCloner = struct {
 /// A generic iterator that merges multiple sorted iterators using a min-heap.
 /// The iterators must yield entries sorted by Key ASC.
 /// When keys are equal, entries are sorted by Version DESC (newer first).
-pub fn HeapMergeIterator(
-    comptime EntryType: type, 
-    comptime SourceIteratorType: type,
-    comptime _: type
-) type {
+pub fn HeapMergeIterator(comptime EntryType: type, comptime SourceIteratorType: type, comptime _: type) type {
     return struct {
         const Self = @This();
 
@@ -95,23 +91,23 @@ pub fn HeapMergeIterator(
 
             if (self.heap.removeOrNull()) |node| {
                 self.pending_source_idx = node.source_idx;
-                // Return the entry directly (Zero-Copy). 
+                // Return the entry directly (Zero-Copy).
                 // It is valid until this function is called again.
                 return node.entry;
             }
             return null;
         }
-        
+
         /// Reset and rebuild heap (useful after seeking sources)
         pub fn reset(self: *Self) !void {
             self.pending_source_idx = null;
 
             // Clear heap
             while (self.heap.removeOrNull()) |_| {}
-            
+
             // Refill
             for (self.sources, 0..) |*src, i| {
-                 if (try src.next()) |entry| {
+                if (try src.next()) |entry| {
                     try self.heap.add(.{
                         .entry = entry,
                         .source_idx = i,

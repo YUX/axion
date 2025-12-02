@@ -12,7 +12,7 @@ pub const LevelIterator = struct {
     tables: []const *TableInfo,
     current_table_idx: usize,
     current_iter: ?SSTable.Reader.Iterator,
-    
+
     pub fn init(allocator: Allocator, tables: []const *TableInfo) LevelIterator {
         return .{
             .allocator = allocator,
@@ -32,7 +32,7 @@ pub const LevelIterator = struct {
         // 1. Binary Search to find the first table where max_key >= key
         var left: usize = 0;
         var right: usize = self.tables.len;
-        
+
         while (left < right) {
             const mid = left + (right - left) / 2;
             const cmp = Comparator.compare(self.tables[mid].max_key, key);
@@ -42,19 +42,19 @@ pub const LevelIterator = struct {
                 right = mid;
             }
         }
-        
+
         self.current_table_idx = left;
-        
+
         if (self.current_iter) |*iter| {
             iter.deinit();
             self.current_iter = null;
         }
 
         if (self.current_table_idx < self.tables.len) {
-             try self.openCurrentIter();
-             if (self.current_iter) |*iter| {
-                 try iter.seek(key);
-             }
+            try self.openCurrentIter();
+            if (self.current_iter) |*iter| {
+                try iter.seek(key);
+            }
         }
     }
 
@@ -75,7 +75,7 @@ pub const LevelIterator = struct {
                     iter.deinit();
                     self.current_iter = null;
                     self.current_table_idx += 1;
-                    continue; 
+                    continue;
                 }
             } else {
                 self.current_table_idx += 1;
@@ -86,7 +86,7 @@ pub const LevelIterator = struct {
 
     fn openCurrentIter(self: *LevelIterator) !void {
         if (self.current_table_idx >= self.tables.len) return;
-        
+
         const table = self.tables[self.current_table_idx];
         if (table.reader) |reader| {
             self.current_iter = reader.iterator();
@@ -94,7 +94,7 @@ pub const LevelIterator = struct {
             return error.TableReaderNotOpen;
         }
     }
-    
+
     pub fn iterator(self: *LevelIterator) Iterator {
         return Iterator{
             .ptr = self,

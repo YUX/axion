@@ -37,7 +37,7 @@ fn checkSqlite(rc: c_int, db: ?*c.sqlite3) void {
 
 fn worker(db_path: [:0]const u8, workload: Workload, mode: Mode, seed: u64) void {
     var db: ?*c.sqlite3 = null;
-    
+
     var rc = c.sqlite3_open(db_path.ptr, &db);
     checkSqlite(rc, db);
     defer _ = c.sqlite3_close(db);
@@ -79,7 +79,7 @@ fn worker(db_path: [:0]const u8, workload: Workload, mode: Mode, seed: u64) void
     while (!should_stop.load(.monotonic)) {
         const op_type = switch (workload) {
             .Write => 0, // All write
-            .Read => 1,  // All read
+            .Read => 1, // All read
             .Mix => if (random.boolean()) @as(u8, 0) else @as(u8, 1),
         };
 
@@ -87,16 +87,16 @@ fn worker(db_path: [:0]const u8, workload: Workload, mode: Mode, seed: u64) void
             // WRITE
             const k = random.intRangeAtMost(usize, 0, max_key);
             const key_str = std.fmt.bufPrintZ(&buf_key, "key_{}", .{k}) catch unreachable;
-            const val_str = std.fmt.bufPrintZ(&buf_val, "value_{}_{}", .{k, random.int(u32)}) catch unreachable;
+            const val_str = std.fmt.bufPrintZ(&buf_val, "value_{}_{}", .{ k, random.int(u32) }) catch unreachable;
 
             _ = c.sqlite3_reset(stmt_insert);
             _ = c.sqlite3_bind_text(stmt_insert, 1, key_str.ptr, -1, c.SQLITE_STATIC);
             _ = c.sqlite3_bind_text(stmt_insert, 2, val_str.ptr, -1, c.SQLITE_STATIC);
-            
+
             rc = c.sqlite3_step(stmt_insert);
             if (rc != c.SQLITE_DONE) {
-                 // Retry on busy? We set busy_timeout.
-                 // If it fails, we just continue/retry.
+                // Retry on busy? We set busy_timeout.
+                // If it fails, we just continue/retry.
             }
         } else {
             // READ
@@ -105,12 +105,12 @@ fn worker(db_path: [:0]const u8, workload: Workload, mode: Mode, seed: u64) void
 
             _ = c.sqlite3_reset(stmt_read);
             _ = c.sqlite3_bind_text(stmt_read, 1, key_str.ptr, -1, c.SQLITE_STATIC);
-            
+
             rc = c.sqlite3_step(stmt_read);
             if (rc == c.SQLITE_ROW) {
                 const val = c.sqlite3_column_text(stmt_read, 0);
                 // Force a read
-                if (val != null and val[0] == 0) {} 
+                if (val != null and val[0] == 0) {}
             }
         }
 
@@ -121,7 +121,7 @@ fn worker(db_path: [:0]const u8, workload: Workload, mode: Mode, seed: u64) void
 fn runBenchmark(allocator: std.mem.Allocator, mode: Mode, workload: Workload) !void {
     const db_path = "bench.db";
     const db_path_c = "bench.db";
-    
+
     // Clean previous
     std.fs.cwd().deleteFile(db_path) catch {};
     std.fs.cwd().deleteFile("bench.db-wal") catch {};
@@ -131,10 +131,10 @@ fn runBenchmark(allocator: std.mem.Allocator, mode: Mode, workload: Workload) !v
     var db: ?*c.sqlite3 = null;
     const rc = c.sqlite3_open(db_path_c, &db);
     checkSqlite(rc, db);
-    
+
     // Set PRAGMAs
     _ = c.sqlite3_exec(db, "PRAGMA journal_mode = WAL;", null, null, null);
-    
+
     const sync_pragma = switch (mode) {
         .Full => "PRAGMA synchronous = FULL;",
         .Normal => "PRAGMA synchronous = NORMAL;",
@@ -151,7 +151,7 @@ fn runBenchmark(allocator: std.mem.Allocator, mode: Mode, workload: Workload) !v
         _ = c.sqlite3_exec(db, "BEGIN;", null, null, null);
         var stmt: ?*c.sqlite3_stmt = null;
         _ = c.sqlite3_prepare_v2(db, "INSERT INTO bench VALUES (?, ?)", -1, &stmt, null);
-        
+
         var i: usize = 0;
         var k_buf: [32]u8 = undefined;
         while (i < 10000) : (i += 1) {
@@ -195,12 +195,15 @@ fn runBenchmark(allocator: std.mem.Allocator, mode: Mode, workload: Workload) !v
     // Report
     const total_ops = ops_count.load(.acquire);
     const qps = total_ops / DURATION_SECONDS;
-    std.debug.print("  {s} - {s}: {d} ops/sec (Total: {d})\n", .{
-        switch(mode) { .Full => "FULL", .Normal => "NORMAL", .Off => "OFF" },
-        switch(workload) { .Write => "Write", .Read => "Read", .Mix => "Mix" },
-        qps,
-        total_ops
-    });
+    std.debug.print("  {s} - {s}: {d} ops/sec (Total: {d})\n", .{ switch (mode) {
+        .Full => "FULL",
+        .Normal => "NORMAL",
+        .Off => "OFF",
+    }, switch (workload) {
+        .Write => "Write",
+        .Read => "Read",
+        .Mix => "Mix",
+    }, qps, total_ops });
 
     // Cleanup DB file
     std.fs.cwd().deleteFile(db_path) catch {};

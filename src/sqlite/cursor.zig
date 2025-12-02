@@ -44,10 +44,10 @@ pub fn xOpen(vtab: [*c]c.sqlite3_vtab, ppCursor: [*c][*c]c.sqlite3_vtab_cursor) 
     cursor.scan_idx_id = 0;
     cursor.scan_idx_cols = 0;
     cursor.scan_idx_eq_mode = false;
-    
+
     cursor.decoded_row_ptr = null;
     cursor.decoded_row_len = 0;
-    
+
     cursor.arena = arena_ptr;
 
     ppCursor.* = &cursor.base;
@@ -69,24 +69,18 @@ pub fn xClose(cursor: [*c]c.sqlite3_vtab_cursor) callconv(.c) c_int {
     if (self.read_txn_id != 0) {
         vtab.db.tm.endReadOnly(.{ .id = self.read_txn_id, .read_version = self.read_txn_ver });
     }
-    
+
     self.arena.deinit();
     allocator.destroy(self.arena);
     allocator.destroy(self);
     return c.SQLITE_OK;
 }
 
-pub fn xFilter(
-    cursor: [*c]c.sqlite3_vtab_cursor, 
-    idxNum: c_int, 
-    idxStr: [*c]const u8, 
-    argc: c_int, 
-    argv: [*c]?*c.sqlite3_value
-) callconv(.c) c_int {
+pub fn xFilter(cursor: [*c]c.sqlite3_vtab_cursor, idxNum: c_int, idxStr: [*c]const u8, argc: c_int, argv: [*c]?*c.sqlite3_value) callconv(.c) c_int {
     _ = idxStr;
     const self = @as(*types.AxionCursor, @ptrCast(cursor));
     const vtab = @as(*types.AxionVTab, @ptrCast(cursor.*.pVtab));
-    
+
     // Cleanup previous state
     if (self.val_ref_ptr) |ptr| {
         const v = @as(*SSTable.ValueRef, @ptrCast(@alignCast(ptr)));
@@ -136,14 +130,14 @@ pub fn xFilter(
             // Point Lookup
             if (argc < 1) return c.SQLITE_INTERNAL;
             const val = argv[0];
-            
+
             const key = encodePrimaryKey(arena_alloc, val, pk_type) catch return c.SQLITE_NOMEM;
             const result = vtab.db.get(key) catch |err| return types.mapZigError(err);
             if (result) |val_ref| {
                 const v_ptr = arena_alloc.create(SSTable.ValueRef) catch return c.SQLITE_NOMEM;
                 v_ptr.* = val_ref;
                 self.val_ref_ptr = v_ptr;
-                
+
                 self.current_key_ptr = key.ptr;
                 self.current_key_len = key.len;
                 self.current_value_ptr = v_ptr.data.ptr;
@@ -155,14 +149,16 @@ pub fn xFilter(
             // Range
             var arg_iter: usize = 0;
             if ((flags & (2 | 4)) != 0) {
-                const val = argv[arg_iter]; arg_iter += 1;
+                const val = argv[arg_iter];
+                arg_iter += 1;
                 const k = encodePrimaryKey(arena_alloc, val, pk_type) catch return c.SQLITE_NOMEM;
                 self.lower_bound_ptr = k.ptr;
                 self.lower_bound_len = k.len;
                 self.lower_bound_inclusive = (flags & 4) != 0;
             }
             if ((flags & (8 | 16)) != 0) {
-                const val = argv[arg_iter]; arg_iter += 1;
+                const val = argv[arg_iter];
+                arg_iter += 1;
                 const k = encodePrimaryKey(arena_alloc, val, pk_type) catch return c.SQLITE_NOMEM;
                 self.upper_bound_ptr = k.ptr;
                 self.upper_bound_len = k.len;
@@ -170,7 +166,7 @@ pub fn xFilter(
             }
             const iter_ptr = createIterator(self, allocator) catch return c.SQLITE_ERROR;
             self.iter = iter_ptr;
-            const prefix_byte = [_]u8{ @intFromEnum(CompositeKey.KeyType.Primary) };
+            const prefix_byte = [_]u8{@intFromEnum(CompositeKey.KeyType.Primary)};
             var seek_key: []const u8 = &prefix_byte;
             if (self.lower_bound_ptr) |ptr| seek_key = ptr[0..self.lower_bound_len];
             iter_ptr.seek(seek_key) catch return c.SQLITE_ERROR;
@@ -198,7 +194,7 @@ pub fn xFilter(
         for (0..num_cols) |k| {
             if (arg_iter >= argc) break;
             const cid = index_def.?.column_ids.items[k];
-            
+
             var col_type: Schema.ColumnType = .Blob;
             for (vtab.schema.columns.items) |c_def| {
                 if (c_def.id == cid) {
@@ -206,7 +202,7 @@ pub fn xFilter(
                     break;
                 }
             }
-            
+
             const val_bytes = encodeValue(arena_alloc, argv[arg_iter], col_type) catch return c.SQLITE_NOMEM;
             seek_values.append(arena_alloc, val_bytes) catch return c.SQLITE_NOMEM;
             arg_iter += 1;
@@ -215,12 +211,12 @@ pub fn xFilter(
         const lb = CompositeKey.encodeIndexSeekKey(arena_alloc, idx_id, seek_values.items) catch return c.SQLITE_NOMEM;
         self.lower_bound_ptr = lb.ptr;
         self.lower_bound_len = lb.len;
-        self.lower_bound_inclusive = true; 
+        self.lower_bound_inclusive = true;
 
         const iter_ptr = createIterator(self, allocator) catch return c.SQLITE_ERROR;
         self.iter = iter_ptr;
         iter_ptr.seek(lb) catch return c.SQLITE_ERROR;
-        
+
         advanceIndexIterator(self, idx_id) catch return c.SQLITE_ERROR;
     }
 
@@ -233,13 +229,13 @@ pub fn xNext(cursor: [*c]c.sqlite3_vtab_cursor) callconv(.c) c_int {
     _ = self.arena.reset(.retain_capacity);
     self.decoded_row_ptr = null;
     self.decoded_row_len = 0;
-    
+
     if (self.val_ref_ptr) |ptr| {
         const v = @as(*SSTable.ValueRef, @ptrCast(@alignCast(ptr)));
         v.deinit();
         self.val_ref_ptr = null;
     }
-    
+
     self.current_key_ptr = null;
     self.current_value_ptr = null;
 
@@ -275,19 +271,19 @@ pub fn xColumn(cursor: [*c]c.sqlite3_vtab_cursor, ctx: ?*c.sqlite3_context, n: c
 
     if (self.current_value_ptr) |ptr| {
         if (self.decoded_row_ptr == null) {
-             const val_slice = ptr[0..self.current_value_len];
-             const decoded = Row.Row.deserializeBorrowed(arena_alloc, val_slice) catch return c.SQLITE_NOMEM;
-             self.decoded_row_ptr = decoded.ptr;
-             self.decoded_row_len = decoded.len;
+            const val_slice = ptr[0..self.current_value_len];
+            const decoded = Row.Row.deserializeBorrowed(arena_alloc, val_slice) catch return c.SQLITE_NOMEM;
+            self.decoded_row_ptr = decoded.ptr;
+            self.decoded_row_len = decoded.len;
         }
-        
+
         if (col_idx >= self.decoded_row_len) {
             c.sqlite3_result_null(ctx);
             return c.SQLITE_OK;
         }
 
         const val = self.decoded_row_ptr.?[col_idx];
-        
+
         switch (val) {
             .Integer => |i| c.sqlite3_result_int64(ctx, i),
             .Float => |f| c.sqlite3_result_double(ctx, f),
@@ -310,18 +306,18 @@ pub fn xRowid(cursor: [*c]c.sqlite3_vtab_cursor, pRowid: [*c]c.sqlite3_int64) ca
 fn createIterator(self: *types.AxionCursor, alloc: std.mem.Allocator) !*Iterator {
     const vtab = @as(*types.AxionVTab, @ptrCast(self.base.pVtab));
     types.registry_init_once.call();
-    
+
     const key = types.RegistryKey{ .conn = vtab.sqlite_conn, .db = vtab.db };
     const shard = types.registry.getShard(key);
     shard.mutex.lock();
     defer shard.mutex.unlock();
-    
+
     if (shard.map.getPtr(key)) |entry| {
         if (entry.rolled_back) return error.TransactionRolledBack;
-        
+
         const concrete = try alloc.create(MergedIterator);
         concrete.* = try entry.txn.scan("");
-        
+
         const wrapper = try alloc.create(Iterator);
         wrapper.* = concrete.iterator();
         return wrapper;
@@ -329,10 +325,10 @@ fn createIterator(self: *types.AxionCursor, alloc: std.mem.Allocator) !*Iterator
         const rot = vtab.db.tm.beginReadOnly();
         self.read_txn_id = rot.id;
         self.read_txn_ver = rot.read_version;
-        
+
         const concrete = try alloc.create(SnapshotIterator);
         concrete.* = try vtab.db.createIterator(rot.read_version);
-        
+
         const wrapper = try alloc.create(Iterator);
         wrapper.* = concrete.iterator();
         return wrapper;
@@ -344,11 +340,11 @@ fn advancePkIterator(self: *types.AxionCursor) !void {
 
     while (entry) |e| {
         if (e.key.len == 0 or e.key[0] != @intFromEnum(CompositeKey.KeyType.Primary) or e.value.len == 0) {
-             if (e.key.len > 0 and e.key[0] > @intFromEnum(CompositeKey.KeyType.Primary)) {
-                 entry = null;
-                 break;
-             }
-             entry = try self.iter.?.next();
+            if (e.key.len > 0 and e.key[0] > @intFromEnum(CompositeKey.KeyType.Primary)) {
+                entry = null;
+                break;
+            }
+            entry = try self.iter.?.next();
         } else {
             break;
         }
@@ -357,19 +353,19 @@ fn advancePkIterator(self: *types.AxionCursor) !void {
     if (entry) |e| {
         if (self.lower_bound_ptr) |ptr| {
             if (!self.lower_bound_inclusive) {
-                 const lb = ptr[0..self.lower_bound_len];
-                 if (Comparator.compare(e.key, lb) == .eq) {
-                     return advancePkIterator(self);
-                 }
+                const lb = ptr[0..self.lower_bound_len];
+                if (Comparator.compare(e.key, lb) == .eq) {
+                    return advancePkIterator(self);
+                }
             }
         }
         if (self.upper_bound_ptr) |ptr| {
             const ub = ptr[0..self.upper_bound_len];
             const cmp = Comparator.compare(e.key, ub);
             var over = false;
-            if (self.upper_bound_inclusive) { 
+            if (self.upper_bound_inclusive) {
                 if (cmp == .gt) over = true;
-            } else { 
+            } else {
                 if (cmp != .lt) over = true;
             }
             if (over) {
@@ -390,7 +386,7 @@ fn advancePkIterator(self: *types.AxionCursor) !void {
 fn advanceIndexIterator(self: *types.AxionCursor, idx_id: u32) !void {
     const vtab = @as(*types.AxionVTab, @ptrCast(self.base.pVtab));
     const arena_alloc = self.arena.allocator();
-    
+
     // We need index def to get total columns for extractPrimaryKey
     var total_cols: usize = 0;
     for (vtab.schema.indexes.items) |idx| {
@@ -409,46 +405,46 @@ fn advanceIndexIterator(self: *types.AxionCursor, idx_id: u32) !void {
         const e = entry_opt.?;
 
         if (e.key.len < 5 or e.key[0] != @intFromEnum(CompositeKey.KeyType.Index)) {
-             self.is_eof = true; 
-             return;
-        }
-        
-        const curr_id = std.mem.readInt(u32, e.key[1..5], .big);
-        if (curr_id != idx_id) {
-            self.is_eof = true; 
+            self.is_eof = true;
             return;
         }
-        
+
+        const curr_id = std.mem.readInt(u32, e.key[1..5], .big);
+        if (curr_id != idx_id) {
+            self.is_eof = true;
+            return;
+        }
+
         // Check Bounds (Prefix Match)
         if (self.lower_bound_ptr) |ptr| {
-             const lb = ptr[0..self.lower_bound_len];
-             if (!std.mem.startsWith(u8, e.key, lb)) {
-                 // Moved past the prefix
-                 self.is_eof = true;
-                 return;
-             }
+            const lb = ptr[0..self.lower_bound_len];
+            if (!std.mem.startsWith(u8, e.key, lb)) {
+                // Moved past the prefix
+                self.is_eof = true;
+                return;
+            }
         }
-        
+
         // PK Extraction
         const pk = CompositeKey.extractPrimaryKey(arena_alloc, e.key, total_cols) catch continue;
-        
+
         const row_ref = vtab.db.get(pk) catch return error.DBGetFailed;
         if (row_ref) |ref| {
             const v_ptr = arena_alloc.create(SSTable.ValueRef) catch return error.OutOfMemory;
             v_ptr.* = ref;
-            
+
             if (self.val_ref_ptr) |p| {
-                 const v = @as(*SSTable.ValueRef, @ptrCast(@alignCast(p)));
-                 v.deinit();
+                const v = @as(*SSTable.ValueRef, @ptrCast(@alignCast(p)));
+                v.deinit();
             }
             self.val_ref_ptr = v_ptr;
-            
+
             self.current_key_ptr = pk.ptr;
             self.current_key_len = pk.len;
-            
+
             self.current_value_ptr = v_ptr.data.ptr;
             self.current_value_len = v_ptr.data.len;
-            
+
             self.is_eof = false;
             return;
         } else {
@@ -475,14 +471,14 @@ fn encodeValueAppend(alloc: std.mem.Allocator, list: *std.ArrayListUnmanaged(u8)
         .Integer => {
             const i = c.sqlite3_value_int64(val);
             var buf: [8]u8 = undefined;
-            std.mem.writeInt(i64, &buf, i, .big); 
+            std.mem.writeInt(i64, &buf, i, .big);
             try list.appendSlice(alloc, &buf);
         },
         .Float => {
-             const f = c.sqlite3_value_double(val);
-             var buf: [8]u8 = undefined;
-             std.mem.writeInt(u64, &buf, @as(u64, @bitCast(f)), .big);
-             try list.appendSlice(alloc, &buf);
+            const f = c.sqlite3_value_double(val);
+            var buf: [8]u8 = undefined;
+            std.mem.writeInt(u64, &buf, @as(u64, @bitCast(f)), .big);
+            try list.appendSlice(alloc, &buf);
         },
         .Text => {
             const txt = c.sqlite3_value_text(val);

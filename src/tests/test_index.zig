@@ -22,7 +22,7 @@ test "Secondary Index Integration" {
         };
         try db.putIndexed("user:1", "User Data Alice", &updates);
     }
-    
+
     // User 2: Bob
     {
         const updates = [_]IndexUpdate{
@@ -51,12 +51,12 @@ test "Secondary Index Integration" {
 
             const pk = try CompositeKey.extractPrimaryKey(allocator, entry.key);
             defer allocator.free(pk);
-            
+
             // We expect user:1 first (Alice)
             // But wait, we are in a loop now.
             // Let's collect results or check sequentially.
             // Since the logic is sequential:
-            
+
             if (std.mem.eql(u8, pk, "user:1")) {
                 // Found user:1.
                 // Check next.
@@ -104,21 +104,21 @@ test "Secondary Index Integration" {
         // Should find user:3. user:1 should be skipped (tombstone).
         while (try iter.next()) |entry| {
             if (entry.value.len == 0) continue;
-            
+
             const pk = try CompositeKey.extractPrimaryKey(allocator, entry.key);
             defer allocator.free(pk);
             try std.testing.expectEqualStrings("user:3", pk);
             break;
         }
-        
+
         // Next should be Bob (user:2)
         while (try iter.next()) |entry| {
-             if (entry.value.len == 0) continue;
-             
-             const pk = try CompositeKey.extractPrimaryKey(allocator, entry.key);
-             defer allocator.free(pk);
-             try std.testing.expectEqualStrings("user:2", pk);
-             break;
+            if (entry.value.len == 0) continue;
+
+            const pk = try CompositeKey.extractPrimaryKey(allocator, entry.key);
+            defer allocator.free(pk);
+            try std.testing.expectEqualStrings("user:2", pk);
+            break;
         }
     }
 }

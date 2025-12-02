@@ -61,20 +61,20 @@ pub const Manifest = struct {
         // 1. Deletions
         if (tables_to_delete.len > 0) {
             for (tables_to_delete) |del_id| {
-                 for (&self.levels) |*level| {
-                     var i: usize = 0;
-                     while (i < level.items.len) {
-                         if (level.items[i].id == del_id) {
-                             const t = level.orderedRemove(i);
-                             self.allocator.free(t.min_key);
-                             self.allocator.free(t.max_key);
-                             if (t.reader) |r| r.unref();
-                             // Don't increment i
-                         } else {
-                             i += 1;
-                         }
-                     }
-                 }
+                for (&self.levels) |*level| {
+                    var i: usize = 0;
+                    while (i < level.items.len) {
+                        if (level.items[i].id == del_id) {
+                            const t = level.orderedRemove(i);
+                            self.allocator.free(t.min_key);
+                            self.allocator.free(t.max_key);
+                            if (t.reader) |r| r.unref();
+                            // Don't increment i
+                        } else {
+                            i += 1;
+                        }
+                    }
+                }
             }
         }
 
@@ -87,8 +87,8 @@ pub const Manifest = struct {
             new_meta.min_key = min_copy;
             new_meta.max_key = max_copy;
             try self.levels[meta.level].append(self.allocator, new_meta);
-            
-             if (meta.id >= self.next_file_id) {
+
+            if (meta.id >= self.next_file_id) {
                 self.next_file_id = meta.id + 1;
             }
         }
@@ -157,7 +157,7 @@ pub const Manifest = struct {
                     _ = try std.fmt.bufPrint(&hex_buf, "{x:0>2}", .{b});
                     try writer.writeAll(&hex_buf);
                 }
-                
+
                 try writer.writeAll("\", \"max_key\": \"");
                 for (table.max_key) |b| {
                     var hex_buf: [2]u8 = undefined;
@@ -188,7 +188,7 @@ pub const Manifest = struct {
         defer file.close();
         try file.writeAll(buffer.items);
         try file.sync();
-        
+
         try std.fs.cwd().rename(tmp_path, self.path);
     }
 
@@ -227,16 +227,16 @@ pub const Manifest = struct {
                             const min_key_hex = obj.get("min_key").?.string;
                             const max_key_hex = obj.get("max_key").?.string;
                             const file_size = obj.get("file_size").?.integer;
-                            
+
                             const max_ver = if (obj.get("max_version")) |v| @as(u64, @intCast(v.integer)) else 0;
 
                             // Decode Hex
                             if (min_key_hex.len % 2 != 0 or max_key_hex.len % 2 != 0) return error.InvalidManifest;
-                            
+
                             const min_key = try self.allocator.alloc(u8, min_key_hex.len / 2);
                             errdefer self.allocator.free(min_key);
                             _ = try std.fmt.hexToBytes(min_key, min_key_hex);
-                            
+
                             const max_key = try self.allocator.alloc(u8, max_key_hex.len / 2);
                             errdefer self.allocator.free(max_key);
                             _ = try std.fmt.hexToBytes(max_key, max_key_hex);
@@ -273,7 +273,7 @@ test "Manifest basic flow" {
     const allocator = std.testing.allocator;
     var buf: [64]u8 = undefined;
     const path = try std.fmt.bufPrint(&buf, "MANIFEST_TEST_{}", .{std.crypto.random.int(u64)});
-    
+
     std.fs.cwd().deleteFile(path) catch {};
     defer std.fs.cwd().deleteFile(path) catch {};
 
@@ -283,7 +283,7 @@ test "Manifest basic flow" {
 
         var tables_to_add = std.ArrayListUnmanaged(Manifest.TableMetadata){};
         defer tables_to_add.deinit(allocator);
-        
+
         try tables_to_add.append(allocator, .{
             .id = 1,
             .level = 0,

@@ -4,7 +4,7 @@ const DB = @import("axion").DB;
 const SSTable = @import("axion").SSTable;
 
 const PROMPT = "axion> ";
-const HELP_TEXT = 
+const HELP_TEXT =
     \\Available commands:
     \\  open <path>           Open database at path
     \\  close                 Close the current database
@@ -26,13 +26,13 @@ pub fn main() !void {
 
     const stdout = try std.fs.openFileAbsolute("/dev/stdout", .{ .mode = .write_only });
     defer stdout.close();
-    
+
     const stdin = try std.fs.openFileAbsolute("/dev/stdin", .{ .mode = .read_only });
     defer stdin.close();
 
     var db_instance: ?*DB = null;
     var db_path: ?[]u8 = null;
-    
+
     defer {
         if (db_instance) |db| db.close();
         if (db_path) |p| allocator.free(p);
@@ -46,7 +46,7 @@ pub fn main() !void {
         const path = args[1];
         db_path = try allocator.dupe(u8, path);
         db_instance = DB.open(allocator, path, .{ .wal_sync_mode = .Full }) catch |err| {
-            try print(stdout, "Failed to open DB at '{s}': {}\n", .{path, err});
+            try print(stdout, "Failed to open DB at '{s}': {}\n", .{ path, err });
             return;
         };
         try print(stdout, "Database opened at '{s}'\n", .{path});
@@ -58,12 +58,12 @@ pub fn main() !void {
 
     while (true) {
         try print(stdout, "{s}", .{PROMPT});
-        
+
         const line_opt = readLine(stdin, &buf) catch |err| {
             try print(stdout, "Error reading input: {}\n", .{err});
             break;
         };
-        
+
         const line = line_opt orelse break;
 
         const trimmed = std.mem.trim(u8, line, " \r\t");
@@ -84,11 +84,14 @@ pub fn main() !void {
                     db_instance = null;
                 }
                 if (db_path) |old_p| allocator.free(old_p);
-                
+
                 db_path = try allocator.dupe(u8, p);
                 db_instance = DB.open(allocator, p, .{ .wal_sync_mode = .Full }) catch |err| {
                     try print(stdout, "Error opening DB: {}\n", .{err});
-                    if (db_path) |dp| { allocator.free(dp); db_path = null; }
+                    if (db_path) |dp| {
+                        allocator.free(dp);
+                        db_path = null;
+                    }
                     continue;
                 };
                 try print(stdout, "Database opened at '{s}'\n", .{p});
@@ -113,7 +116,7 @@ pub fn main() !void {
 
             if (std.mem.eql(u8, cmd, "put")) {
                 const key = it.next();
-                const val = it.next(); 
+                const val = it.next();
                 if (key != null and val != null) {
                     db.put(key.?, val.?) catch |err| {
                         try print(stdout, "Error: {}\n", .{err});
@@ -125,7 +128,10 @@ pub fn main() !void {
             } else if (std.mem.eql(u8, cmd, "get")) {
                 const key = it.next();
                 if (key) |k| {
-                    if (db.get(k) catch |err| { try print(stdout, "Error: {}\n", .{err}); continue; }) |val_ref| {
+                    if (db.get(k) catch |err| {
+                        try print(stdout, "Error: {}\n", .{err});
+                        continue;
+                    }) |val_ref| {
                         defer val_ref.deinit();
                         try print(stdout, "{s}\n", .{val_ref.data});
                     } else {
@@ -152,7 +158,7 @@ pub fn main() !void {
                         limit = l;
                     } else |_| {}
                 }
-                
+
                 const ver = db.tm.global_version.load(.acquire);
                 var iter = db.createIterator(ver) catch |err| {
                     try print(stdout, "Error creating iterator: {}\n", .{err});
@@ -161,8 +167,8 @@ pub fn main() !void {
                 defer iter.deinit();
 
                 iter.seek(prefix) catch |err| {
-                     try print(stdout, "Error seeking: {}\n", .{err});
-                     continue;
+                    try print(stdout, "Error seeking: {}\n", .{err});
+                    continue;
                 };
 
                 var count: usize = 0;
@@ -171,10 +177,10 @@ pub fn main() !void {
                         try print(stdout, "Error during scan: {}\n", .{err});
                         break;
                     } orelse break;
-                    
+
                     if (!std.mem.startsWith(u8, entry.key, prefix)) break;
-                    
-                    try print(stdout, "{s} = {s}\n", .{entry.key, entry.value});
+
+                    try print(stdout, "{s} = {s}\n", .{ entry.key, entry.value });
                 }
             } else if (std.mem.eql(u8, cmd, "count")) {
                 const ver = db.tm.global_version.load(.acquire);
@@ -185,13 +191,13 @@ pub fn main() !void {
                 defer iter.deinit();
 
                 iter.seek("") catch |err| {
-                     try print(stdout, "Error seeking: {}\n", .{err});
-                     continue;
+                    try print(stdout, "Error seeking: {}\n", .{err});
+                    continue;
                 };
-                
+
                 var count: usize = 0;
                 while (true) {
-                     const entry = iter.next() catch |err| {
+                    const entry = iter.next() catch |err| {
                         try print(stdout, "Error during scan: {}\n", .{err});
                         break;
                     };
@@ -200,17 +206,16 @@ pub fn main() !void {
                     if (count % 100000 == 0) try print(stdout, "... {}\r", .{count});
                 }
                 try print(stdout, "Total keys: {}\n", .{count});
-
             } else if (std.mem.eql(u8, cmd, "stats")) {
-                 const v = db.versions.getCurrent();
-                 defer v.unref();
-                 try print(stdout, "Current Version Stats:\n", .{});
-                 try print(stdout, "  MemTable Size: {} bytes\n", .{v.memtable.approxSize()});
-                 try print(stdout, "  Immutable MemTables: {}\n", .{v.immutables.items.len});
-                 
-                 for (v.levels, 0..) |level, i| {
-                     try print(stdout, "  Level {}: {} tables\n", .{i, level.items.len});
-                 }
+                const v = db.versions.getCurrent();
+                defer v.unref();
+                try print(stdout, "Current Version Stats:\n", .{});
+                try print(stdout, "  MemTable Size: {} bytes\n", .{v.memtable.approxSize()});
+                try print(stdout, "  Immutable MemTables: {}\n", .{v.immutables.items.len});
+
+                for (v.levels, 0..) |level, i| {
+                    try print(stdout, "  Level {}: {} tables\n", .{ i, level.items.len });
+                }
             } else {
                 try print(stdout, "Unknown command: {s}\n", .{cmd});
             }

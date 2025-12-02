@@ -13,17 +13,17 @@ pub const VAL_FMT = "val_{:0>16}";
 pub const SEQ_KEY_FMT = "seq_{:0>12}";
 
 pub const Workload = enum {
-    Write,      // Random Insert (Auto-commit/Single-txn)
-    SeqWrite,   // Sequential Insert (Auto-commit/Single-txn)
-    Read,       // Random Point Read
-    RangeScan,  // Range Scan (Limit 100)
-    Mix,        // 50/50 Read/Write
+    Write, // Random Insert (Auto-commit/Single-txn)
+    SeqWrite, // Sequential Insert (Auto-commit/Single-txn)
+    Read, // Random Point Read
+    RangeScan, // Range Scan (Limit 100)
+    Mix, // 50/50 Read/Write
 };
 
 pub const Mode = enum {
-    Full,   // Synchronous = FULL (Durability)
+    Full, // Synchronous = FULL (Durability)
     Normal, // Synchronous = NORMAL (OS Cache)
-    Off,    // Synchronous = OFF (Memory)
+    Off, // Synchronous = OFF (Memory)
 };
 
 pub const BenchmarkConfig = struct {
@@ -31,7 +31,7 @@ pub const BenchmarkConfig = struct {
     duration: u64 = DEFAULT_DURATION,
     key_count: usize = DEFAULT_KEYS,
     compaction_threads: usize = 8,
-    
+
     // Optional Filters (if null, run all)
     filter_workload: ?Workload = null,
     filter_mode: ?Mode = null,
@@ -70,7 +70,7 @@ pub const BenchmarkConfig = struct {
                 }
             } else if (std.mem.eql(u8, arg, "--mode")) {
                 if (args.next()) |val| {
-                     inline for (std.meta.fields(Mode)) |f| {
+                    inline for (std.meta.fields(Mode)) |f| {
                         if (std.mem.eql(u8, val, f.name)) {
                             config.filter_mode = @enumFromInt(f.value);
                         }

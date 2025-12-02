@@ -18,7 +18,7 @@ pub const Builder = struct {
     block_start_offset: u64,
     enable_compression: bool,
     last_key: std.ArrayListUnmanaged(u8),
-    
+
     final_path: []const u8,
     temp_path: []const u8,
     block_size: usize,
@@ -29,9 +29,9 @@ pub const Builder = struct {
         errdefer allocator.free(temp_path);
 
         const file = try std.fs.cwd().createFile(temp_path, .{ .read = true, .truncate = true });
-        
+
         const bloom_elements = if (expected_elements > 0) expected_elements else 1000;
-        
+
         var b = Builder{
             .file = file,
             .allocator = allocator,
@@ -57,7 +57,7 @@ pub const Builder = struct {
             self.file.close();
             std.fs.cwd().deleteFile(self.temp_path) catch {};
         }
-        
+
         self.allocator.free(self.temp_path);
         self.allocator.free(self.final_path);
 
@@ -76,14 +76,15 @@ pub const Builder = struct {
 
         const entry_size = 4 + 4 + 4 + 8 + key.len + value.len;
         const estimated_restarts_size = self.restarts.items.len * 4 + 4;
-        
-        if (self.current_block.items.len > 0 and 
-            self.current_block.items.len + entry_size + estimated_restarts_size > self.block_size) {
+
+        if (self.current_block.items.len > 0 and
+            self.current_block.items.len + entry_size + estimated_restarts_size > self.block_size)
+        {
             try self.flushBlock();
         }
 
         var shared_len: u32 = 0;
-        
+
         const is_start_of_block = (self.current_block.items.len == 0);
         const is_restart_interval = (self.restart_counter >= Format.RESTART_INTERVAL);
 
@@ -152,23 +153,18 @@ pub const Builder = struct {
         var compressed_slice: []const u8 = undefined;
         var dest_buffer: ?[]u8 = null;
         defer if (dest_buffer) |d| self.allocator.free(d);
-        
-        var compression_type: u8 = 0; 
+
+        var compression_type: u8 = 0;
 
         if (self.enable_compression) {
             const max_dst_size = lz4.LZ4_compressBound(uncompressed_len);
             dest_buffer = try self.allocator.alloc(u8, @intCast(max_dst_size));
-            
-            const compressed_size = lz4.LZ4_compress_default(
-                self.current_block.items.ptr,
-                dest_buffer.?.ptr,
-                uncompressed_len,
-                @intCast(max_dst_size)
-            );
+
+            const compressed_size = lz4.LZ4_compress_default(self.current_block.items.ptr, dest_buffer.?.ptr, uncompressed_len, @intCast(max_dst_size));
 
             if (compressed_size > 0) {
-                    compressed_slice = dest_buffer.?[0..@intCast(compressed_size)];
-                    compression_type = 1; 
+                compressed_slice = dest_buffer.?[0..@intCast(compressed_size)];
+                compression_type = 1;
             } else {
                 compressed_slice = self.current_block.items;
                 compression_type = 0;
@@ -238,12 +234,12 @@ pub const Builder = struct {
         try writer.writeInt(u64, filter_offset, .little);
         try writer.writeInt(u64, Format.MAGIC, .little);
         try writer.writeInt(u32, Format.VERSION, .little);
-        
+
         const final_size = try self.file.getPos();
-        
+
         self.file.close();
         try std.fs.cwd().rename(self.temp_path, self.final_path);
-        
+
         self.finished = true;
         return final_size;
     }

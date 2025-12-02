@@ -38,23 +38,26 @@ fn worker(db: *DB, workload: Config.Workload, seed: u64, key_count: usize) void 
                 } else |_| {}
             },
             .RangeScan => {
-                 const k = random.intRangeAtMost(usize, 0, key_count);
-                 const key_str = std.fmt.bufPrint(&buf_key, Config.KEY_FMT, .{k}) catch unreachable;
-                 
-                 // Use ReadOnlyTransaction to match VTab performance (avoiding RW overhead)
-                 const rot = db.tm.beginReadOnly();
-                 defer db.tm.endReadOnly(rot);
-                 
-                 var iter = db.createIterator(rot.read_version) catch continue;
-                 
-                 // We must seek manually as DB.createIterator returns a raw MergedIterator
-                 iter.seek(key_str) catch { iter.deinit(); continue; };
-                 
-                 var count: usize = 0;
-                 while (count < 100) : (count += 1) {
-                     if (iter.next() catch break) |_| {} else break;
-                 }
-                 iter.deinit();
+                const k = random.intRangeAtMost(usize, 0, key_count);
+                const key_str = std.fmt.bufPrint(&buf_key, Config.KEY_FMT, .{k}) catch unreachable;
+
+                // Use ReadOnlyTransaction to match VTab performance (avoiding RW overhead)
+                const rot = db.tm.beginReadOnly();
+                defer db.tm.endReadOnly(rot);
+
+                var iter = db.createIterator(rot.read_version) catch continue;
+
+                // We must seek manually as DB.createIterator returns a raw MergedIterator
+                iter.seek(key_str) catch {
+                    iter.deinit();
+                    continue;
+                };
+
+                var count: usize = 0;
+                while (count < 100) : (count += 1) {
+                    if (iter.next() catch break) |_| {} else break;
+                }
+                iter.deinit();
             },
             .Mix => {
                 if (random.boolean()) {
@@ -69,7 +72,7 @@ fn worker(db: *DB, workload: Config.Workload, seed: u64, key_count: usize) void 
                         if (maybe_val) |val| val.deinit();
                     } else |_| {}
                 }
-            }
+            },
         }
         _ = ops_count.fetchAdd(1, .monotonic);
     }
@@ -80,24 +83,24 @@ var run_id = std.atomic.Value(u32).init(0);
 
 fn runBenchmark(allocator: std.mem.Allocator, mode: WAL.SyncMode, workload: Config.Workload, config: Config.BenchmarkConfig) !void {
     const db_path = Config.DB_PATH_NATIVE;
-    
+
     std.debug.print("  [Native] {s} - {s} (Threads: {}, Keys: {})...\n", .{
-        switch(mode) {
+        switch (mode) {
             .Full => "FULL",
             .Normal => "NORMAL",
-            .Off => "OFF"
+            .Off => "OFF",
         },
         @tagName(workload),
         config.threads,
         config.key_count,
     });
-    
+
     std.fs.cwd().deleteTree(db_path) catch {};
-    
+
     // Pre-populate using fast mode (Off) to avoid waiting forever on Full sync setup
     if (workload == .Read or workload == .Mix or workload == .RangeScan) {
         var db_prep = DB.open(allocator, db_path, .{ .wal_sync_mode = .Off }) catch return;
-        
+
         var txn = try db_prep.beginTransaction();
         var i: usize = 0;
         var k_buf: [64]u8 = undefined;
@@ -130,7 +133,7 @@ fn runBenchmark(allocator: std.mem.Allocator, mode: WAL.SyncMode, workload: Conf
         fn run(duration: u64, id: u32) void {
             const c = @cImport(@cInclude("unistd.h"));
             _ = c.sleep(@intCast(duration + 5));
-            
+
             // Check if this is still the active run
             if (run_id.load(.acquire) != id) return;
 
@@ -139,7 +142,7 @@ fn runBenchmark(allocator: std.mem.Allocator, mode: WAL.SyncMode, workload: Conf
                 std.process.exit(1);
             }
         }
-    }.run, .{config.duration, current_run_id});
+    }.run, .{ config.duration, current_run_id });
     watchdog.detach();
 
     var threads = std.ArrayListUnmanaged(std.Thread){};
@@ -170,7 +173,7 @@ fn runBenchmark(allocator: std.mem.Allocator, mode: WAL.SyncMode, workload: Conf
 pub fn main() !void {
     const allocator = std.heap.c_allocator;
     std.debug.print("Running Native Axion Benchmarks\n", .{});
-    
+
     const config = try Config.BenchmarkConfig.parseArgs(allocator);
 
     const modes = [_]WAL.SyncMode{ .Full, .Normal, .Off };
@@ -179,20 +182,20 @@ pub fn main() !void {
     for (modes) |m| {
         // Filter Mode
         if (config.filter_mode) |fm| {
-             const match = switch (fm) {
-                 .Full => m == .Full,
-                 .Normal => m == .Normal,
-                 .Off => m == .Off,
-             };
-             if (!match) continue;
+            const match = switch (fm) {
+                .Full => m == .Full,
+                .Normal => m == .Normal,
+                .Off => m == .Off,
+            };
+            if (!match) continue;
         }
 
         for (workloads) |w| {
-             // Filter Workload
-             if (config.filter_workload) |fw| {
-                 if (fw != w) continue;
-             }
-             
+            // Filter Workload
+            if (config.filter_workload) |fw| {
+                if (fw != w) continue;
+            }
+
             try runBenchmark(allocator, m, w, config);
         }
     }

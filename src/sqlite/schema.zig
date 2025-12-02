@@ -96,17 +96,14 @@ pub const TableSchema = struct {
         var list = std.ArrayListUnmanaged(u8){};
         defer list.deinit(self.allocator);
 
-        const header = try std.fmt.allocPrint(self.allocator, 
-            "{{\"name\": \"{s}\", \"next_column_id\": {}, \"next_index_id\": {}, \"columns\": [", 
-            .{self.name, self.next_column_id, self.next_index_id});
+        const header = try std.fmt.allocPrint(self.allocator, "{{\"name\": \"{s}\", \"next_column_id\": {}, \"next_index_id\": {}, \"columns\": [", .{ self.name, self.next_column_id, self.next_index_id });
         defer self.allocator.free(header);
         try list.appendSlice(self.allocator, header);
 
         for (self.columns.items, 0..) |col, i| {
             if (i > 0) try list.appendSlice(self.allocator, ", ");
-            
-            const col_str = try std.fmt.allocPrint(self.allocator, "{{\"name\": \"{s}\", \"type\": {}, \"id\": {}, \"is_primary_key\": {}}}", 
-                .{col.name, @intFromEnum(col.type), col.id, col.is_primary_key});
+
+            const col_str = try std.fmt.allocPrint(self.allocator, "{{\"name\": \"{s}\", \"type\": {}, \"id\": {}, \"is_primary_key\": {}}}", .{ col.name, @intFromEnum(col.type), col.id, col.is_primary_key });
             defer self.allocator.free(col_str);
             try list.appendSlice(self.allocator, col_str);
         }
@@ -115,12 +112,12 @@ pub const TableSchema = struct {
 
         for (self.indexes.items, 0..) |idx, i| {
             if (i > 0) try list.appendSlice(self.allocator, ", ");
-            
+
             try list.appendSlice(self.allocator, "{");
-            const s = try std.fmt.allocPrint(self.allocator, "\"name\": \"{s}\", \"id\": {}, \"unique\": {}, \"column_ids\": [", .{idx.name, idx.id, idx.unique});
+            const s = try std.fmt.allocPrint(self.allocator, "\"name\": \"{s}\", \"id\": {}, \"unique\": {}, \"column_ids\": [", .{ idx.name, idx.id, idx.unique });
             try list.appendSlice(self.allocator, s);
             self.allocator.free(s);
-            
+
             for (idx.column_ids.items, 0..) |cid, j| {
                 if (j > 0) try list.appendSlice(self.allocator, ",");
                 const cs = try std.fmt.allocPrint(self.allocator, "{}", .{cid});
@@ -135,20 +132,20 @@ pub const TableSchema = struct {
     }
 
     pub fn fromJson(allocator: Allocator, json: []const u8) !TableSchema {
-        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json, .{} );
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, json, .{});
         defer parsed.deinit();
-        
+
         const root = parsed.value;
         if (root != .object) return error.InvalidSchema;
-        
+
         const name = root.object.get("name").?.string;
         const next_id = root.object.get("next_column_id").?.integer;
         const next_idx_id = if (root.object.get("next_index_id")) |v| v.integer else 1;
-        
+
         var schema = try TableSchema.init(allocator, name);
         schema.next_column_id = @intCast(next_id);
         schema.next_index_id = @intCast(next_idx_id);
-        
+
         if (root.object.get("columns")) |cols_val| {
             if (cols_val == .array) {
                 for (cols_val.array.items) |col_val| {
@@ -157,7 +154,7 @@ pub const TableSchema = struct {
                     const col_type = @as(ColumnType, @enumFromInt(obj.get("type").?.integer));
                     const col_id = obj.get("id").?.integer;
                     const is_pk = obj.get("is_primary_key").?.bool;
-                    
+
                     const name_copy = try allocator.dupe(u8, col_name);
                     try schema.columns.append(allocator, .{
                         .name = name_copy,
@@ -178,7 +175,7 @@ pub const TableSchema = struct {
                     const unique = if (obj.get("unique")) |v| v.bool else false;
 
                     var ids = std.ArrayListUnmanaged(u32){};
-                    
+
                     if (obj.get("column_ids")) |cids_val| {
                         if (cids_val == .array) {
                             for (cids_val.array.items) |cv| {
@@ -206,19 +203,19 @@ pub const TableSchema = struct {
 
 test "Schema serialization" {
     const allocator = std.testing.allocator;
-    
+
     var schema = try TableSchema.init(allocator, "users");
     defer schema.deinit();
-    
+
     try schema.addColumn("id", .Integer, true);
     try schema.addColumn("email", .Text, false);
-    
+
     const json = try schema.toJson();
     defer allocator.free(json);
-    
+
     var loaded = try TableSchema.fromJson(allocator, json);
     defer loaded.deinit();
-    
+
     try std.testing.expectEqualStrings("users", loaded.name);
     try std.testing.expectEqual(loaded.columns.items.len, 2);
     try std.testing.expectEqualStrings("id", loaded.columns.items[0].name);

@@ -44,7 +44,7 @@ pub const MemTableIteratorWrapper = struct {
     fn deinit(ptr: *anyopaque) void {
         const self: *MemTableIteratorWrapper = @ptrCast(@alignCast(ptr));
         // inner.deinit() is no-op for MemTable currently, but good practice if it changes
-        self.inner.deinit(); 
+        self.inner.deinit();
         self.allocator.destroy(self);
     }
 };
@@ -104,7 +104,7 @@ pub const HashMapIteratorWrapper = struct {
             .entries = .{},
             .idx = 0,
         };
-        
+
         var it = map.iterator();
         while (it.next()) |entry| {
             try self.entries.append(allocator, .{
@@ -113,7 +113,7 @@ pub const HashMapIteratorWrapper = struct {
                 .version = version,
             });
         }
-        
+
         // Sort
         std.mem.sort(Entry, self.entries.items, {}, cmpEntry);
 
@@ -149,7 +149,7 @@ pub const HashMapIteratorWrapper = struct {
         // Binary search
         var left: usize = 0;
         var right: usize = self.entries.items.len;
-        
+
         while (left < right) {
             const mid = left + (right - left) / 2;
             if (Comparator.compare(self.entries.items[mid].key, key) == .lt) {

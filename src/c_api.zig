@@ -68,7 +68,7 @@ export fn axion_db_put(db: *axion_db_t, key: [*c]const u8, key_len: usize, val: 
     const self: *DB = @ptrCast(@alignCast(db));
     const k = key[0..key_len];
     const v = val[0..val_len];
-    
+
     self.put(k, v) catch return -1;
     return 0;
 }
@@ -76,17 +76,17 @@ export fn axion_db_put(db: *axion_db_t, key: [*c]const u8, key_len: usize, val: 
 export fn axion_db_get(db: *axion_db_t, key: [*c]const u8, key_len: usize, out_val: *[*c]u8, out_val_len: *usize) c_int {
     const self: *DB = @ptrCast(@alignCast(db));
     const k = key[0..key_len];
-    
+
     const result = self.get(k) catch return -1;
     if (result) |val_ref| {
         // We must copy data to C-owned memory because val_ref owns its memory via internal allocators/cache handles
         // and we need a simple free mechanism for C.
         const buf = allocator.alloc(u8, val_ref.data.len) catch return -1;
         @memcpy(buf, val_ref.data);
-        
+
         out_val.* = buf.ptr;
         out_val_len.* = buf.len;
-        
+
         val_ref.deinit();
         return 0;
     } else {
@@ -114,19 +114,19 @@ export fn axion_db_delete(db: *axion_db_t, key: [*c]const u8, key_len: usize) c_
 const CIterator = struct {
     inner: SnapshotIterator,
     current_entry: ?Iterator.Entry,
-    
+
     pub fn init(inner: SnapshotIterator) CIterator {
         return .{
             .inner = inner,
             .current_entry = null,
         };
     }
-    
+
     pub fn seek(self: *CIterator, key: []const u8) !void {
         try self.inner.seek(key);
         self.current_entry = try self.inner.next();
     }
-    
+
     pub fn next(self: *CIterator) !void {
         self.current_entry = try self.inner.next();
     }
@@ -135,11 +135,11 @@ const CIterator = struct {
 export fn axion_c_iter_create(db: *axion_db_t, out_iter: *?*axion_iter_t) c_int {
     const self: *DB = @ptrCast(@alignCast(db));
     const current_ver = self.tm.global_version.load(.acquire);
-    
+
     const inner = self.createIterator(current_ver) catch return -1;
     const wrapper = allocator.create(CIterator) catch return -1;
     wrapper.* = CIterator.init(inner);
-    
+
     out_iter.* = @ptrCast(wrapper);
     return 0;
 }

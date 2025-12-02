@@ -128,7 +128,7 @@ pub fn build(b: *std.Build) void {
     verify_scan.linkLibC();
     verify_scan.linkSystemLibrary("sqlite3");
     b.installArtifact(verify_scan);
-    
+
     const verify_scan_step = b.step("verify_scan", "Run Verification Tool");
     verify_scan_step.dependOn(&b.addRunArtifact(verify_scan).step);
 

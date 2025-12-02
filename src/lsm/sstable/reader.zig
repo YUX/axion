@@ -47,7 +47,7 @@ pub const Reader = struct {
             mmap_ptr = std.posix.mmap(
                 null,
                 file_size,
-                1, 
+                1,
                 .{ .TYPE = .PRIVATE },
                 file.handle,
                 0,
@@ -115,7 +115,7 @@ pub const Reader = struct {
                 }
             }
         }
-        
+
         pub fn readInt(self: *FileReader, comptime T: type, endian: std.builtin.Endian) !T {
             var bytes: [@sizeOf(T)]u8 = undefined;
             try self.readNoEof(&bytes);
@@ -125,7 +125,7 @@ pub const Reader = struct {
 
     fn readFooter(self: *Reader) !void {
         var reader = FileReader{ .file = self.file, .mmap_ptr = self.mmap_ptr };
-        
+
         if (self.mmap_ptr) |_| {
             reader.pos = self.file_size - Format.FOOTER_SIZE;
         } else {
@@ -145,7 +145,7 @@ pub const Reader = struct {
         } else {
             try self.file.seekTo(index_offset);
         }
-        
+
         const num_entries = try reader.readInt(u32, .little);
         try self.index.ensureTotalCapacity(self.allocator, num_entries);
 
@@ -190,7 +190,7 @@ pub const Reader = struct {
         }
         return null;
     }
-    
+
     fn findBlockIndex(self: *Reader, key: []const u8) ?usize {
         var left: usize = 0;
         var right: usize = self.index.items.len;
@@ -226,24 +226,24 @@ pub const Reader = struct {
             if (entry.offset + entry.length > map.len) return error.CorruptBlock;
             break :blk map[entry.offset..][0..entry.length];
         } else blk: {
-                if (entry.length < 9) return error.CorruptBlock;
-                const buf = try self.allocator.alloc(u8, entry.length);
-                const n = try self.file.preadAll(buf, entry.offset);
-                if (n != buf.len) {
-                    self.allocator.free(buf);
-                    return error.EndOfStream;
-                }
-                break :blk buf;
+            if (entry.length < 9) return error.CorruptBlock;
+            const buf = try self.allocator.alloc(u8, entry.length);
+            const n = try self.file.preadAll(buf, entry.offset);
+            if (n != buf.len) {
+                self.allocator.free(buf);
+                return error.EndOfStream;
+            }
+            break :blk buf;
         };
-        
+
         defer if (self.mmap_ptr == null) self.allocator.free(@constCast(block_buf));
 
         if (block_buf.len < 9) return error.CorruptBlock;
 
         const compression_type = block_buf[0];
         const uncompressed_len = std.mem.readInt(u32, block_buf[1..5], .little);
-        const data_slice = block_buf[5..block_buf.len-4];
-        const expected_crc = std.mem.readInt(u32, block_buf[block_buf.len-4..][0..4], .little);
+        const data_slice = block_buf[5 .. block_buf.len - 4];
+        const expected_crc = std.mem.readInt(u32, block_buf[block_buf.len - 4 ..][0..4], .little);
 
         if (Crc32.hash(data_slice) != expected_crc) return error.ChecksumMismatch;
 
@@ -256,7 +256,7 @@ pub const Reader = struct {
             } else {
                 const buf = try self.allocator.alloc(u8, uncompressed_len);
                 @memcpy(buf, data_slice);
-                
+
                 if (self.block_cache) |cache| {
                     const handle = try cache.put(self.file_id, entry.offset, buf);
                     return .{ .handle = handle, .buffer = null, .mmap_slice = null };
@@ -267,12 +267,7 @@ pub const Reader = struct {
             const buf = try self.allocator.alloc(u8, uncompressed_len);
             errdefer self.allocator.free(buf);
 
-            const res = lz4.LZ4_decompress_safe(
-                data_slice.ptr,
-                buf.ptr,
-                @intCast(data_slice.len),
-                @intCast(uncompressed_len)
-            );
+            const res = lz4.LZ4_decompress_safe(data_slice.ptr, buf.ptr, @intCast(data_slice.len), @intCast(uncompressed_len));
             if (res < 0 or res != uncompressed_len) return error.DecompressionFailed;
 
             if (self.block_cache) |cache| {
@@ -285,12 +280,10 @@ pub const Reader = struct {
 
     fn searchBlock(self: *Reader, _: Allocator, block_idx: usize, key: []const u8, snapshot_version: u64) !?ValueRef {
         const res = try self.getBlockData(block_idx);
-        
+
         var block_data: []const u8 = undefined;
-        if (res.handle) |h| block_data = h.data
-        else if (res.buffer) |b| block_data = b
-        else block_data = res.mmap_slice.?;
-        
+        if (res.handle) |h| block_data = h.data else if (res.buffer) |b| block_data = b else block_data = res.mmap_slice.?;
+
         var keep_buffer = false;
         defer {
             if (res.handle) |h| h.release();
@@ -308,7 +301,7 @@ pub const Reader = struct {
         while (try block_iter.next()) |entry| {
             const cmp = Comparator.compare(entry.key, key);
             if (cmp == .gt) break;
-            
+
             if (cmp == .eq) {
                 if (entry.version <= snapshot_version) {
                     var val_ref = ValueRef{
@@ -322,22 +315,20 @@ pub const Reader = struct {
                         val_ref.handle = h.clone();
                     } else if (res.buffer) |b| {
                         val_ref.owned_buffer = b;
-                        keep_buffer = true; 
+                        keep_buffer = true;
                     }
                     return val_ref;
                 }
             }
         }
-        
+
         return null;
     }
 
     fn searchBlockVersion(self: *Reader, block_idx: usize, key: []const u8) !?u64 {
         const res = try self.getBlockData(block_idx);
-            var block_data: []const u8 = undefined;
-        if (res.handle) |h| block_data = h.data
-        else if (res.buffer) |b| block_data = b
-        else block_data = res.mmap_slice.?;
+        var block_data: []const u8 = undefined;
+        if (res.handle) |h| block_data = h.data else if (res.buffer) |b| block_data = b else block_data = res.mmap_slice.?;
 
         defer {
             if (res.handle) |h| h.release();
@@ -388,7 +379,7 @@ pub const Reader = struct {
 
             if (self.block_iter) |*iter| iter.deinit();
             self.block_iter = null;
-            
+
             if (self.block_handle) |h| {
                 h.release();
                 self.block_handle = null;
@@ -401,11 +392,9 @@ pub const Reader = struct {
             const res = try self.reader.getBlockData(idx);
             self.block_handle = res.handle;
             self.owned_buffer = res.buffer;
-            
+
             var current_data: []const u8 = undefined;
-            if (res.handle) |h| current_data = h.data
-            else if (res.buffer) |b| current_data = b
-            else current_data = res.mmap_slice.?;
+            if (res.handle) |h| current_data = h.data else if (res.buffer) |b| current_data = b else current_data = res.mmap_slice.?;
 
             self.block_iter = BlockIterator.init(self.reader.allocator, current_data);
             self.current_block_idx = idx;
@@ -415,7 +404,7 @@ pub const Reader = struct {
             const block_idx = self.reader.findBlockIndex(key) orelse 0;
             // If block_idx is not exact, it points to block where key >= block.min_key.
             // Correct.
-            
+
             try self.loadBlock(block_idx);
 
             if (self.block_iter) |*iter| {

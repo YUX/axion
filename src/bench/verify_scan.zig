@@ -33,7 +33,7 @@ pub fn main() !void {
         while (i < 1000) : (i += 1) {
             const k = try std.fmt.bufPrintZ(&k_buf, Config.KEY_FMT, .{i});
             const v = try std.fmt.bufPrintZ(&v_buf, Config.VAL_FMT, .{i});
-            
+
             _ = c.sqlite3_reset(stmt);
             _ = c.sqlite3_bind_text(stmt, 1, k.ptr, -1, c.SQLITE_STATIC);
             _ = c.sqlite3_bind_text(stmt, 2, v.ptr, -1, c.SQLITE_STATIC);
@@ -81,7 +81,7 @@ pub fn main() !void {
 
         var iter = try db.createIterator(rot.read_version);
         defer iter.deinit();
-        
+
         // Native scan will see Composite Keys (prefixed with \x01)
         // We scan from start
         const seek_key = "";

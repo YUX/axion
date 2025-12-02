@@ -31,7 +31,7 @@ test "Secondary Indexing" {
     // Note: Query planner integration is NOT yet implemented, so this will do a full scan.
     // BUT we are testing if the index MAINTENANCE works (i.e. no crash on insert/update).
     // Later we will verify index usage.
-    
+
     // 4. Update Data (Update Indexed Column)
     // Bob -> bob.new@example.com
     if (c.sqlite3_exec(db, "UPDATE users SET email = 'bob.new@example.com' WHERE id = 2;", null, null, null) != c.SQLITE_OK) {
@@ -48,13 +48,13 @@ test "Secondary Indexing" {
             try std.testing.expectEqualStrings("bob.new@example.com", std.mem.span(email));
         } else return error.MissingRow;
     }
-    
+
     // 5. Delete Data (Delete Indexed Row)
     // Delete Alice
     if (c.sqlite3_exec(db, "DELETE FROM users WHERE id = 1;", null, null, null) != c.SQLITE_OK) {
         return error.DeleteFailed;
     }
-    
+
     // Verify Delete
     {
         var stmt: ?*c.sqlite3_stmt = null;

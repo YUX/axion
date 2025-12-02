@@ -7,7 +7,7 @@ const DURATION_SECONDS = 5;
 
 const Workload = enum {
     Write, // Random
-    Read,  // Random Point
+    Read, // Random Point
     Mix,
     RangeScan,
     SeqWrite,
@@ -26,14 +26,14 @@ fn worker(db: *DB, workload: Workload, seed: u64) void {
     var buf_val: [128]u8 = undefined;
 
     // For SeqWrite
-    var seq_counter: usize = seed * 1000000; 
+    var seq_counter: usize = seed * 1000000;
 
     while (!should_stop.load(.monotonic)) {
         switch (workload) {
             .Write => {
                 const k = random.intRangeAtMost(usize, 0, max_key);
                 const key_str = std.fmt.bufPrint(&buf_key, "key_{:0>9}", .{k}) catch unreachable;
-                const val_str = std.fmt.bufPrint(&buf_val, "value_{}_{}", .{k, random.int(u32)}) catch unreachable;
+                const val_str = std.fmt.bufPrint(&buf_val, "value_{}_{}", .{ k, random.int(u32) }) catch unreachable;
 
                 db.put(key_str, val_str) catch |err| {
                     if (err == error.Conflict) continue;
@@ -45,9 +45,9 @@ fn worker(db: *DB, workload: Workload, seed: u64) void {
                 seq_counter += 1;
                 const key_str = std.fmt.bufPrint(&buf_key, "seq_{:0>12}", .{k}) catch unreachable;
                 const val_str = std.fmt.bufPrint(&buf_val, "value_{}", .{k}) catch unreachable;
-                
+
                 db.put(key_str, val_str) catch |err| {
-                     if (err == error.Conflict) continue;
+                    if (err == error.Conflict) continue;
                 };
             },
             .Read => {
@@ -59,29 +59,32 @@ fn worker(db: *DB, workload: Workload, seed: u64) void {
                 } else |_| {}
             },
             .RangeScan => {
-                 const k = random.intRangeAtMost(usize, 0, max_key);
-                 const key_str = std.fmt.bufPrint(&buf_key, "key_{:0>9}", .{k}) catch unreachable;
-                 
-                 var txn = db.beginTransaction() catch continue;
-                 
-                 var iter = txn.scan(key_str) catch { txn.deinit(); continue; };
-                 var count: usize = 0;
-                 while (count < 100) : (count += 1) {
-                     if (iter.next() catch break) |_| {
-                         // consume
-                     } else {
-                         break;
-                     }
-                 }
-                 iter.deinit();
-                 txn.deinit();
+                const k = random.intRangeAtMost(usize, 0, max_key);
+                const key_str = std.fmt.bufPrint(&buf_key, "key_{:0>9}", .{k}) catch unreachable;
+
+                var txn = db.beginTransaction() catch continue;
+
+                var iter = txn.scan(key_str) catch {
+                    txn.deinit();
+                    continue;
+                };
+                var count: usize = 0;
+                while (count < 100) : (count += 1) {
+                    if (iter.next() catch break) |_| {
+                        // consume
+                    } else {
+                        break;
+                    }
+                }
+                iter.deinit();
+                txn.deinit();
             },
             .Mix => {
                 if (random.boolean()) {
                     // Write
                     const k = random.intRangeAtMost(usize, 0, max_key);
                     const key_str = std.fmt.bufPrint(&buf_key, "key_{:0>9}", .{k}) catch unreachable;
-                    const val_str = std.fmt.bufPrint(&buf_val, "value_{}_{}", .{k, random.int(u32)}) catch unreachable;
+                    const val_str = std.fmt.bufPrint(&buf_val, "value_{}_{}", .{ k, random.int(u32) }) catch unreachable;
                     db.put(key_str, val_str) catch {};
                 } else {
                     // Read
@@ -91,7 +94,7 @@ fn worker(db: *DB, workload: Workload, seed: u64) void {
                         if (val) |v| db.allocator.free(v);
                     } else |_| {}
                 }
-            }
+            },
         }
 
         _ = ops_count.fetchAdd(1, .monotonic);
@@ -101,13 +104,17 @@ fn worker(db: *DB, workload: Workload, seed: u64) void {
 fn runBenchmark(allocator: std.mem.Allocator, mode: WAL.SyncMode, workload: Workload) !void {
     const db_path = "bench_axion_dir";
     std.debug.print("  [Bench] Starting {s} {s}...\n", .{
-        switch(mode) { .Full => "Full", .Normal => "Normal", .Off => "Off" },
+        switch (mode) {
+            .Full => "Full",
+            .Normal => "Normal",
+            .Off => "Off",
+        },
         @tagName(workload),
     });
-    
+
     // Clean previous
     std.fs.cwd().deleteTree(db_path) catch {};
-    
+
     // Setup DB
     var db = DB.open(allocator, db_path, mode) catch |err| {
         std.debug.print("  [Bench] Error opening DB: {}\n", .{err});
@@ -117,16 +124,16 @@ fn runBenchmark(allocator: std.mem.Allocator, mode: WAL.SyncMode, workload: Work
     // Pre-populate for Read/Scan/Mix workload
     if (workload == .Read or workload == .Mix or workload == .RangeScan) {
         // std.debug.print("  Pre-populating 100k rows...\n", .{});
-        
+
         var txn = try db.beginTransaction();
         defer txn.deinit();
-        
+
         var i: usize = 0;
         var k_buf: [32]u8 = undefined;
         while (i < 100000) : (i += 1) {
             const k = std.fmt.bufPrint(&k_buf, "key_{:0>9}", .{i}) catch unreachable;
             try txn.put(k, "initial_value");
-            
+
             if (i % 1000 == 0) {
                 try txn.commit();
                 txn.deinit();
@@ -164,16 +171,15 @@ fn runBenchmark(allocator: std.mem.Allocator, mode: WAL.SyncMode, workload: Work
     // Report
     const total_ops = ops_count.load(.acquire);
     const qps = total_ops / DURATION_SECONDS;
-    std.debug.print("  {s} - {s}: {d} ops/sec (Total: {d})\n", .{
-        switch(mode) { .Full => "FULL", .Normal => "NORMAL", .Off => "OFF" },
-        @tagName(workload),
-        qps,
-        total_ops
-    });
+    std.debug.print("  {s} - {s}: {d} ops/sec (Total: {d})\n", .{ switch (mode) {
+        .Full => "FULL",
+        .Normal => "NORMAL",
+        .Off => "OFF",
+    }, @tagName(workload), qps, total_ops });
 
     // Close DB before deleting files
     db.close();
-    
+
     std.fs.cwd().deleteTree(db_path) catch {};
 }
 

@@ -43,21 +43,20 @@ test "Integrity Check and Backup API" {
         std.debug.print("Backup Error: {s}\n", .{c.sqlite3_errmsg(db)});
         return error.BackupFailed;
     }
-    
+
     // 4. Verify Backup (basic check: files exist)
-    const backup_db_manifest = try std.fs.path.join(std.testing.allocator, &.{backup_path, "MANIFEST"});
+    const backup_db_manifest = try std.fs.path.join(std.testing.allocator, &.{ backup_path, "MANIFEST" });
     defer std.testing.allocator.free(backup_db_manifest);
     std.fs.cwd().access(backup_db_manifest, .{}) catch return error.ManifestMissing;
 
-    const backup_db_wal = try std.fs.path.join(std.testing.allocator, &.{backup_path, "WAL"});
+    const backup_db_wal = try std.fs.path.join(std.testing.allocator, &.{ backup_path, "WAL" });
     defer std.testing.allocator.free(backup_db_wal);
     std.fs.cwd().access(backup_db_wal, .{}) catch return error.WALMissing;
 
     // SSTable check might fail if no flush happened.
-    // const backup_db_sst = try std.fs.path.join(std.testing.allocator, &.{backup_path, "table_1.sst"}); 
+    // const backup_db_sst = try std.fs.path.join(std.testing.allocator, &.{backup_path, "table_1.sst"});
     // defer std.testing.allocator.free(backup_db_sst);
     // std.fs.cwd().access(backup_db_sst, .{}) catch return error.SSTableMissing;
-
 
     // 5. Open Backup DB and verify data
     var backup_conn: ?*c.sqlite3 = null;

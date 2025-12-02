@@ -8,7 +8,7 @@ const SSTable = @import("sstable.zig").SSTable;
 pub const TableInfo = struct {
     ref_count: std.atomic.Value(usize),
     allocator: Allocator,
-    
+
     id: u64,
     level: usize,
     file_size: u64,
@@ -17,15 +17,7 @@ pub const TableInfo = struct {
     reader: ?*SSTable.Reader,
     is_compacting: std.atomic.Value(bool),
 
-    pub fn init(
-        allocator: Allocator, 
-        id: u64, 
-        level: usize, 
-        min_key: []const u8, 
-        max_key: []const u8, 
-        file_size: u64, 
-        reader: ?*SSTable.Reader
-    ) !*TableInfo {
+    pub fn init(allocator: Allocator, id: u64, level: usize, min_key: []const u8, max_key: []const u8, file_size: u64, reader: ?*SSTable.Reader) !*TableInfo {
         const self = try allocator.create(TableInfo);
         self.ref_count = std.atomic.Value(usize).init(1);
         self.allocator = allocator;
@@ -33,28 +25,20 @@ pub const TableInfo = struct {
         self.level = level;
         self.file_size = file_size;
         self.is_compacting = std.atomic.Value(bool).init(false);
-        
+
         self.min_key = try allocator.dupe(u8, min_key);
         errdefer allocator.free(self.min_key);
-        
+
         self.max_key = try allocator.dupe(u8, max_key);
-        errdefer allocator.free(self.max_key); 
-        
+        errdefer allocator.free(self.max_key);
+
         self.reader = reader;
         if (self.reader) |r| r.ref();
 
         return self;
     }
 
-    pub fn initStealing(
-        allocator: Allocator, 
-        id: u64, 
-        level: usize, 
-        min_key: []const u8, 
-        max_key: []const u8, 
-        file_size: u64, 
-        reader: ?*SSTable.Reader
-    ) !*TableInfo {
+    pub fn initStealing(allocator: Allocator, id: u64, level: usize, min_key: []const u8, max_key: []const u8, file_size: u64, reader: ?*SSTable.Reader) !*TableInfo {
         const self = try allocator.create(TableInfo);
         self.ref_count = std.atomic.Value(usize).init(1);
         self.allocator = allocator;
@@ -62,7 +46,7 @@ pub const TableInfo = struct {
         self.level = level;
         self.file_size = file_size;
         self.is_compacting = std.atomic.Value(bool).init(false);
-        
+
         self.min_key = min_key;
         self.max_key = max_key;
         self.reader = reader;

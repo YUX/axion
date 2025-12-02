@@ -14,7 +14,7 @@ pub const BloomFilter = struct {
         const num_u64 = (m + 63) / 64;
         const bitset = try allocator.alloc(u64, num_u64);
         @memset(bitset, 0);
-        
+
         return BloomFilter{
             .bitset = bitset,
             .allocator = allocator,
@@ -59,7 +59,7 @@ pub const BloomFilter = struct {
         try writer.writeInt(u64, self.k, .little);
         try writer.writeInt(u64, self.bitset.len, .little);
         for (self.bitset) |word| {
-                try writer.writeInt(u64, word, .little);
+            try writer.writeInt(u64, word, .little);
         }
     }
 
@@ -67,13 +67,13 @@ pub const BloomFilter = struct {
         const bits_count = try reader.readInt(u64, .little);
         const k = try reader.readInt(u64, .little);
         const num_u64 = try reader.readInt(u64, .little);
-        
+
         const bitset = try allocator.alloc(u64, @intCast(num_u64));
         var i: usize = 0;
         while (i < num_u64) : (i += 1) {
             bitset[i] = try reader.readInt(u64, .little);
         }
-        
+
         return BloomFilter{
             .bitset = bitset,
             .allocator = allocator,

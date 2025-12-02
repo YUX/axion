@@ -9,7 +9,7 @@ pub const MergedIterator = struct {
     children: std.ArrayListUnmanaged(Iterator),
     child_entries: std.ArrayListUnmanaged(?Entry),
     heap: std.ArrayListUnmanaged(usize),
-    
+
     read_version: u64,
     last_key: ?[]u8,
     next_child_to_advance: ?usize,
@@ -83,7 +83,7 @@ pub const MergedIterator = struct {
                 try self.advanceChild(idx);
                 continue;
             }
-            
+
             if (!is_visible) {
                 try self.advanceChild(idx);
                 continue;
@@ -96,7 +96,7 @@ pub const MergedIterator = struct {
 
             // Prepare to advance this child NEXT time
             self.next_child_to_advance = idx;
-            
+
             // Return entry pointing DIRECTLY to child's memory (Zero-Copy Value)
             return Entry{ .key = self.last_key.?, .value = entry.value, .version = entry.version };
         }
@@ -106,22 +106,22 @@ pub const MergedIterator = struct {
     fn advanceChild(self: *MergedIterator, idx: usize) !void {
         const entry = try self.children.items[idx].next();
         self.child_entries.items[idx] = entry;
-        
+
         if (entry == null) {
             // Remove root (swap with last, pop, sift down)
             const last_idx = self.heap.items.len - 1;
             std.mem.swap(usize, &self.heap.items[0], &self.heap.items[last_idx]);
             _ = self.heap.pop();
-            
+
             if (self.heap.items.len > 0) {
-                 self.siftDown(0);
+                self.siftDown(0);
             }
         } else {
             // Value changed. Sift down.
             self.siftDown(0);
         }
     }
-    
+
     fn heapPush(self: *MergedIterator, idx: usize) !void {
         try self.heap.append(self.allocator, idx);
         self.siftUp(self.heap.items.len - 1);
@@ -146,11 +146,11 @@ pub const MergedIterator = struct {
         while (idx < half) {
             var left = 2 * idx + 1;
             const right = left + 1;
-            
+
             if (right < self.heap.items.len and self.compare(right, left)) {
                 left = right;
             }
-            
+
             if (self.compare(left, idx)) {
                 std.mem.swap(usize, &self.heap.items[idx], &self.heap.items[left]);
                 idx = left;
@@ -171,7 +171,7 @@ pub const MergedIterator = struct {
         const cmp = Comparator.compare(entry_a.key, entry_b.key);
         if (cmp == .lt) return true;
         if (cmp == .gt) return false;
-        
+
         // Key equal, compare version DESC
         return entry_a.version > entry_b.version;
     }
