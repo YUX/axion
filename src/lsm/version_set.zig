@@ -392,6 +392,11 @@ pub const VersionEdit = struct {
     }
 
     pub fn release(self: *VersionEdit) void {
+        for (self.tables_to_add.items) |t| {
+            self.allocator.free(t.min_key);
+            self.allocator.free(t.max_key);
+            if (t.reader) |r| r.unref();
+        }
         self.tables_to_add.clearRetainingCapacity();
         self.tables_to_delete.clearRetainingCapacity();
     }

@@ -73,6 +73,9 @@ pub const WAL = struct {
         if (self.buffer.items.len > 0) {
             self.performSyncFlush(self.buffer.items);
         }
+        if (builtin.os.tag == .linux and self.use_uring) {
+            self.ring.deinit();
+        }
         self.file.close();
         self.buffer.deinit(self.allocator);
         self.flush_buffer.deinit(self.allocator);
@@ -234,15 +237,17 @@ pub const WAL = struct {
         defer temp_buffer.deinit(self.allocator);
 
         while (true) {
+            const record_start = pos;
             // Header: CRC(4), Ver(8), KLen(4), VLen(4) = 20 bytes
             var header: [20]u8 = undefined;
-            const n_head = try self.file.preadAll(&header, pos);
+            const n_head = try self.file.preadAll(&header, record_start);
             if (n_head == 0) break; // Clean EOF
             if (n_head < 20) {
-                // std.debug.print("WAL: Partial header at EOF ({d} bytes), stop.\n", .{n_head});
+                try self.file.setEndPos(record_start);
+                pos = record_start;
                 break;
             }
-            pos += 20;
+            pos = record_start + 20;
 
             const crc = std.mem.readInt(u32, header[0..4], .little);
             const version = std.mem.readInt(u64, header[4..12], .little);
@@ -256,7 +261,8 @@ pub const WAL = struct {
             // Read payload
             const n_payload = try self.file.preadAll(temp_buffer.items, pos);
             if (n_payload < temp_buffer.items.len) {
-                // std.debug.print("WAL: Partial payload at EOF, stop.\n", .{});
+                try self.file.setEndPos(record_start);
+                pos = record_start;
                 break;
             }
             pos += n_payload;
@@ -287,6 +293,7 @@ pub const WAL = struct {
         }
 
         try self.file.seekTo(pos);
+        self.file_offset = pos;
 
         self.current_sync_version = max_version;
         self.max_buffered_version = max_version;
@@ -405,11 +412,43 @@ test "WAL recovery with partial write" {
         const max_ver = try wal.replay(mem, 0);
 
         try std.testing.expectEqual(max_ver, 10);
-
         if (mem.get("key1", 100)) |val| {
             try std.testing.expectEqualStrings("val1", val);
         } else {
             try std.testing.expect(false);
         }
+
+        const expected_record_size: u64 = RecordFormat.HEADER_SIZE + "key1".len + "val1".len;
+        const stat_after_replay = try wal.file.stat();
+        try std.testing.expectEqual(expected_record_size, stat_after_replay.size);
+
+        var batch2 = std.ArrayListUnmanaged(u8){};
+        defer batch2.deinit(allocator);
+        try WAL.serializeEntry(&batch2, allocator, "key2", "val2", 11);
+        try wal.appendRaw(batch2.items, 11);
+        try wal.waitForDurability(11);
+
+        var wal3 = try WAL.init(allocator, test_path, .Full);
+        defer wal3.deinit();
+        var mem2 = try MemTable.init(allocator);
+        defer mem2.deinit();
+
+        const max_ver2 = try wal3.replay(mem2, 0);
+        try std.testing.expectEqual(@as(u64, 11), max_ver2);
+
+        if (mem2.get("key1", 100)) |val| {
+            try std.testing.expectEqualStrings("val1", val);
+        } else {
+            try std.testing.expect(false);
+        }
+        if (mem2.get("key2", 100)) |val| {
+            try std.testing.expectEqualStrings("val2", val);
+        } else {
+            try std.testing.expect(false);
+        }
+
+        const expected_total_size: u64 = expected_record_size + RecordFormat.HEADER_SIZE + "key2".len + "val2".len;
+        const stat_after_append = try wal3.file.stat();
+        try std.testing.expectEqual(expected_total_size, stat_after_append.size);
     }
 }

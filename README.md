@@ -202,6 +202,14 @@ Axion is built on first principles, avoiding over-engineering while ensuring rob
 |  +--------------------+  |                                            |
 +--------------------------+           +--------------------------------+
 
+**Key pieces**
+- `WAL`: append-only log with CRC; replay trims torn tails, resets offsets, and replays idempotently.
+- `MemTable`: 16-shard skiplist for writes; rotates into immutables when the configured byte budget is hit.
+- `VersionSet`: snapshot container (active + immutable memtables, SSTable metadata, block cache handle) with ref-counting so iterators stay stable.
+- `Compaction`: background threads pick work via level/size scores, rewrite SSTables, and install edits atomically with manifest updates.
+- `BlockCache`: sharded LRU keyed by file id + block offset; ref-counted handles avoid copying block data.
+- `TransactionManager`: MVCC with monotonic versions, group commit batching for WAL/memtable application, and conflict checks against recent history plus latest-visible versions.
+
 +-----------------------------------------------------------------------+
 |                      WORKFLOW: WRITE (PUT)                            |
 +-----------------------------------------------------------------------+
@@ -268,35 +276,33 @@ Axion demonstrates significant performance advantages over standard SQLite (B-Tr
 
 | Metric | SQLite (Native) | Axion (Native) | Axion (VTab) |
 | :--- | :--- | :--- | :--- |
-| **Write (Random)** | 160 | **5,863** | 2,556 |
-| **Write (Sequential)** | 157 | **6,087** | 2,595 |
-| **Read (Point)** | 1,926,734 | **2,658,290** | 2,198,205 |
-| **Range Scan** | **539,888** | 240,440 | 149,312 |
-| **Mix (Read/Write)** | **2,379,954*** | 11,493 | 5,082 |
-
-*\*Note: SQLite's high Mix score suggests the benchmark may benefit from implicit transaction batching or extremely high read ratios in this specific test case, whereas Axion appears to be paying the fsync penalty for writes more strictly.*
+| **Write (Random)** | 170 | **7,286** | 2,984 |
+| **Write (Sequential)** | 145 | **7,501** | 3,131 |
+| **Read (Point)** | 1,272,793 | **3,247,513** | 2,512,192 |
+| **Range Scan** | **608,382** | 241,331 | 147,694 |
+| **Mix (Read/Write)** | **2,783,051** | 13,743 | 6,286 |
 
 ### 2. Sync Mode: `NORMAL` (Buffered/Async Writes)
 *Performance balanced: Writes are buffered to OS cache; `io_uring` used where applicable.*
 
 | Metric | SQLite (Native) | Axion (Native) | Axion (VTab) |
 | :--- | :--- | :--- | :--- |
-| **Write (Random)** | 153 | **369,037** | 282,246 |
-| **Write (Sequential)** | 154 | **401,930** | 303,050 |
-| **Read (Point)** | 1,097,877 | **2,574,712** | 2,204,108 |
-| **Range Scan** | **599,852** | 241,794 | 148,225 |
-| **Mix (Read/Write)** | **2,537,048** | 670,029 | 495,939 |
+| **Write (Random)** | 147 | **414,050** | 311,247 |
+| **Write (Sequential)** | 172 | **443,205** | 323,952 |
+| **Read (Point)** | 1,277,213 | **2,631,517** | 2,326,464 |
+| **Range Scan** | **611,262** | 244,644 | 154,379 |
+| **Mix (Read/Write)** | **2,667,385** | 607,981 | 536,348 |
 
 ### 3. Sync Mode: `OFF` (Unsafe/Max Speed)
 *Raw in-memory speed: No disk sync guarantees.*
 
 | Metric | SQLite (Native) | Axion (Native) | Axion (VTab) |
 | :--- | :--- | :--- | :--- |
-| **Write (Random)** | 138 | **370,795** | 275,176 |
-| **Write (Sequential)** | 163 | **404,950** | 284,876 |
-| **Read (Point)** | 1,133,065 | **2,549,722** | 2,202,941 |
-| **Range Scan** | **582,908** | 244,441 | 140,152 |
-| **Mix (Read/Write)** | **2,483,035** | 669,776 | 474,662 |
+| **Write (Random)** | 147 | **356,085** | 317,070 |
+| **Write (Sequential)** | 172 | **409,023** | 329,262 |
+| **Read (Point)** | 1,204,112 | **2,507,509** | 2,325,622 |
+| **Range Scan** | **562,927** | 247,068 | 153,207 |
+| **Mix (Read/Write)** | **2,587,663** | 727,515 | 546,838 |
 
 ---
 
